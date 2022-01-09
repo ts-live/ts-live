@@ -35,5 +35,6 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-
-/public/data
+build/
+public/data/
+public/wasm/
