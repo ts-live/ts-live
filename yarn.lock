@@ -239,7 +239,14 @@
   resolved "https://registry.yarnpkg.com/@rushstack/eslint-patch/-/eslint-patch-1.1.0.tgz#7f698254aadf921e48dda8c0a6b304026b8a9323"
   integrity sha512-JLo+Y592QzIE+q7Dl2pMUtt4q8SKYI5jDrZxrozEQxnGVOyYE+GWK9eLkwTaeN9DDctlaRAQ3TBmzZ1qdLE30A==
 
-"@types/dom-webcodecs@^0.1.3":
+"@types/dom-mediacapture-transform@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.yarnpkg.com/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.2.tgz#5e3be160c1f72bc85ba717a9993c4c36a8fd01d2"
+  integrity sha512-c+GboOblyLBKgFMgGu3rdughD1wUePgHQMeng1pOGOYeDG1iLNRtWUiBi/YxP0WpGmbnU1ICHsV/79JhhALeoA==
+  dependencies:
+    "@types/dom-webcodecs" "*"
+
+"@types/dom-webcodecs@*", "@types/dom-webcodecs@^0.1.3":
   version "0.1.3"
   resolved "https://registry.yarnpkg.com/@types/dom-webcodecs/-/dom-webcodecs-0.1.3.tgz#caa5d9db6d58171998444a58198829d3a33ef48b"
   integrity sha512-MEUfHAnXifFqUbY51WK1f9y3NyupMqBhcRwCpl+UtHcl40Au3ijhahI37bblMoNmAOlU/33KMCkN4usdE1kJjg==
@@ -3124,3 +3131,8 @@ yocto-queue@^0.1.0:
   version "0.1.0"
   resolved "https://registry.yarnpkg.com/yocto-queue/-/yocto-queue-0.1.0.tgz#0294eb3dee05028d31ee1a5fa2c556a6aaf10a1b"
   integrity sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==
+
+zlplayer@^0.0.2:
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/zlplayer/-/zlplayer-0.0.2.tgz#2d7959f381e219c3770da54b3444bc5ff89786fb"
+  integrity sha512-nfxKlRh/wzrZxlTWrkzPlE6LEtLogQjK7+oIBwg+qrbi8okX/bk+4/3WRRYnuKGzsYK7V1PkbXHp65/SqS5urA==
