@@ -39,39 +39,15 @@ const AudioTestPage: NextPage = () => {
     }
     const wasm = splitterWasmModuleState.value
     let count = 0
-    const audioGenerator = new MediaStreamTrackGenerator({ kind: 'audio' })
-    const stream = new MediaStream()
-    const writer = audioGenerator.writable.getWriter()
-    const audioDecoderInit = {
-      async output (output: AudioData) {
-        console.log('AudioDecoder ouptut', output)
-        await writer.write(output)
-      },
-      error (e: unknown) {
-        console.error(
-          'AudioDecoder Error',
-          e,
-          audioDecoder,
-          'count',
-          count,
-          'callbackCount',
-          callbackCount
-        )
-      }
-    }
-    let audioDecoder = new AudioDecoder(audioDecoderInit)
-    const config = {
-      codec: 'mp4a.40.2',
-      sampleRate: 48000,
-      numberOfChannels: 2
-    }
-    audioDecoder.configure(config)
-
-    stream.addTrack(audioGenerator)
-    audioRef.current.srcObject = stream
+    // const audioGenerator = new MediaStreamTrackGenerator({ kind: 'audio' })
+    // const stream = new MediaStream()
+    // const writer = audioGenerator.writable.getWriter()
+    // stream.addTrack(audioGenerator)
+    // audioRef.current.srcObject = stream
     let callbackCount = 0
     let totalCallbackSize = 0
     let startTimestamp: number | null = null
+    const chunkBuffer = new Array<EncodedAudioChunk>()
     ;(window as any).onAudioFrame = (timestamp: number, buf: Uint8Array) => {
       callbackCount++
       totalCallbackSize += buf.length
@@ -85,20 +61,7 @@ const AudioTestPage: NextPage = () => {
         timestamp: timestamp - startTimestamp,
         data: buf
       })
-      try {
-        if (audioDecoder.state == 'closed') {
-          console.warn('audioDecoder closed reset it...')
-          audioDecoder = new AudioDecoder(audioDecoderInit)
-          audioDecoder.configure(config)
-        }
-        audioDecoder.decode(chunk)
-        console.log(audioDecoder)
-        if (callbackCount % 1000 == 0) {
-          console.log(`decode called ${callbackCount}`, audioDecoder)
-        }
-      } catch (e) {
-        console.error('decoder exception', e)
-      }
+      chunkBuffer.push(chunk)
     }
     let totalSize = 0
     fetch('/data/hentatsu.m2ts').then(response => {
@@ -131,6 +94,46 @@ const AudioTestPage: NextPage = () => {
               'totalCallbackSize:',
               totalCallbackSize
             )
+            const audioDecoderInit = {
+              async output (output: AudioData) {
+                console.log('AudioDecoder ouptut', output)
+                // await writer.write(output)
+              },
+              error (e: unknown) {
+                console.error(
+                  'AudioDecoder Error',
+                  e,
+                  audioDecoder,
+                  'count',
+                  count,
+                  'callbackCount',
+                  callbackCount
+                )
+              }
+            }
+            let audioDecoder = new AudioDecoder(audioDecoderInit)
+            const config = {
+              codec: 'mp4a.40.2',
+              sampleRate: 48000,
+              numberOfChannels: 2
+            }
+            audioDecoder.configure(config)
+
+            const startTime = performance.now() * 1000
+            const intervalId = setInterval(() => {
+              const current = performance.now() * 1000 - startTime
+              while (
+                chunkBuffer.length > 0 &&
+                chunkBuffer[0].timestamp < current + 500000
+              ) {
+                const chunk = chunkBuffer.shift()!
+                audioDecoder.decode(chunk)
+                console.log(audioDecoder, chunk)
+              }
+              if (chunkBuffer.length == 0) {
+                clearInterval(intervalId)
+              }
+            }, 100)
           },
           abort (e) {
             console.log('WritableStream abort', e)

@@ -20,42 +20,40 @@ struct TsPacketHeader {
   unsigned pidLo : 8;
 
   unsigned continuityCounter : 4;
-  unsigned adaptionFieldControl : 2;
+  unsigned adaptationFieldControl : 2;
   unsigned transportScramblingControl : 2;
 
   unsigned int pid() { return (pidHi << 8) | pidLo; }
 
-  std::string &&toString() {
+  std::string toString() {
     unsigned int sb = syncByte;
     unsigned int tei = transportErrorIndicator;
     unsigned int pusi = payloadUnitStartIndicator;
     unsigned int tp = transportPriority;
     unsigned int pidhi = pidHi;
     unsigned int pidlo = pidLo;
-    std::string pid_ =
-        fmt::format("{:#06x} (hi:{:#04x} lo:{:#04x}", pid(), pidhi, pidlo);
     unsigned int tsc = transportScramblingControl;
-    unsigned int afc = adaptionFieldControl;
+    unsigned int afc = adaptationFieldControl;
     unsigned int cc = continuityCounter;
-    return std::move(fmt::format(
+    return fmt::format(
         "TsPacketHeader<{:02x} {:02x} {:02x} {:02x} sync_byte:{:#02x} "
         "transport_error_indicator:{:#01b} "
         "payload_unit_start_indicator:{:#01b} transport_priority:{:#01b} "
-        "pid:{} transport_scrambling_control:{:#02b} "
-        "adption_field_control:{:#02b} continuity_counter:{:#01x}>",
+        "pid:{:#06x} transport_scrambling_control:{:#02b} "
+        "adaptation_field_control:{:#02b} continuity_counter:{:#01x}>",
         reinterpret_cast<unsigned char *>(this)[0],
         reinterpret_cast<unsigned char *>(this)[1],
         reinterpret_cast<unsigned char *>(this)[2],
-        reinterpret_cast<unsigned char *>(this)[3], sb, tei, pusi, tp, pid_,
-        tsc, afc, cc));
+        reinterpret_cast<unsigned char *>(this)[3], sb, tei, pusi, tp, pid(),
+        tsc, afc, cc);
   }
 };
 
-enum AdaptionFieldControl {
-  AdaptionFieldError = 0x00,
-  AdaptionFieldNone = 0x01,
-  AdaptionFieldOnly = 0x02,
-  AdaptionFieldBoth = 0x03,
+enum AdaptationFieldControl {
+  AdaptationFieldError = 0x00,
+  AdaptationFieldNone = 0x01,
+  AdaptationFieldOnly = 0x02,
+  AdaptationFieldBoth = 0x03,
 };
 
 struct TsPacketAdaptionFieldHeader {
@@ -69,39 +67,41 @@ struct TsPacketAdaptionFieldHeader {
 
 struct TsPacket {
   TsPacketHeader header;
-  unsigned char bodyWithAdaptionField[TS_PACKET_SIZE - sizeof(TsPacketHeader)];
+  unsigned char
+      bodyWithAdaptationField[TS_PACKET_SIZE - sizeof(TsPacketHeader)];
 
   unsigned char *getBodyAddress() {
-    unsigned int afc = this->header.adaptionFieldControl;
-    if (afc == AdaptionFieldControl::AdaptionFieldOnly ||
-        afc == AdaptionFieldControl::AdaptionFieldBoth) {
+    unsigned int afc = this->header.adaptationFieldControl;
+    if (afc == AdaptationFieldControl::AdaptationFieldOnly ||
+        afc == AdaptationFieldControl::AdaptationFieldBoth) {
       TsPacketAdaptionFieldHeader *afHeader =
-          (TsPacketAdaptionFieldHeader *)this->bodyWithAdaptionField;
-      return &this->bodyWithAdaptionField[1 + afHeader->adaptionFieldLength];
+          (TsPacketAdaptionFieldHeader *)this->bodyWithAdaptationField;
+      return &this->bodyWithAdaptationField[1 + afHeader->adaptionFieldLength];
     } else {
-      return this->bodyWithAdaptionField;
+      return this->bodyWithAdaptationField;
     }
   }
   size_t getBodySize() {
-    unsigned int afc = this->header.adaptionFieldControl;
-    if (afc == AdaptionFieldControl::AdaptionFieldOnly ||
-        afc == AdaptionFieldControl::AdaptionFieldBoth) {
+    unsigned int afc = this->header.adaptationFieldControl;
+    if (afc == AdaptationFieldControl::AdaptationFieldBoth) {
       TsPacketAdaptionFieldHeader *afHeader =
-          (TsPacketAdaptionFieldHeader *)this->bodyWithAdaptionField;
+          (TsPacketAdaptionFieldHeader *)this->bodyWithAdaptationField;
       return TS_PACKET_SIZE - sizeof(TsPacketHeader) -
              afHeader->adaptionFieldLength - 1;
+    } else if (afc == AdaptationFieldControl::AdaptationFieldOnly) {
+      return 0;
     } else {
       return TS_PACKET_SIZE - sizeof(TsPacketHeader);
     }
   }
-  std::string &&toString() {
+  std::string toString() {
     uint8_t *p = reinterpret_cast<uint8_t *>(this);
     std::string ret = std::string("") + fmt::format("Packet:[{:02x}", p[0]);
     for (int i = 1; i < TS_PACKET_SIZE; i++) {
       ret += fmt::format(" {:02x}", p[i]);
     }
     ret += "]";
-    return std::move(ret);
+    return ret;
   }
 };
 

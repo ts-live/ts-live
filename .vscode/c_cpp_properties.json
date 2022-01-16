@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "${HOME}/ghq/github.com/emscripten-core/emsdk/upstream/emscripten/system/include/"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang-12",

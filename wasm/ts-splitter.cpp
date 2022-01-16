@@ -1,28 +1,34 @@
 #include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <emscripten/bind.h>
 #include <emscripten/emscripten.h>
 #include <emscripten/val.h>
+#include <mutex>
 #include <spdlog/spdlog.h>
+#include <thread>
 #include <vector>
 
+#include "adtsfeeder.hpp"
+#include "datafeeder.hpp"
 #include "patpmt.hpp"
+#include "pes.hpp"
 #include "ts.hpp"
 
 namespace {
-const size_t MAX_INPUT_BUFFER = 1024 * 1024;
+const size_t MAX_INPUT_BUFFER = 10 * 1024 * 1024;
 const size_t RESERVED_SIZE = 200;
 std::uint8_t inputBuffer[MAX_INPUT_BUFFER];
 size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 } // namespace
 
-EM_JS(void, callOnPacket, (void *ptr),
-      {
-          // console.log("callback", HEAP8.subarray(ptr, ptr + 188));
-      });
+EM_JS(void, callOnAudioFrame, (double timestamp, uint8_t *buf, size_t size), {
+  // console.log("callback", HEAP8.subarray(ptr, ptr + 188));
+  window.onAudioFrame(timestamp, HEAPU8.subarray(buf, buf + size));
+});
 
 namespace {
 
@@ -45,6 +51,7 @@ TsPacket *getNextPacket() {
 
 emscripten::val getNextInputBuffer(size_t nextSize) {
   if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER - RESERVED_SIZE) {
+    spdlog::warn("Buffer cycling.... size: {}", nextSize);
     size_t remainReadSize = inputBufferWriteIndex - inputBufferReadIndex;
     memcpy(inputBuffer, &inputBuffer[inputBufferReadIndex], remainReadSize);
     inputBufferReadIndex = 0;
@@ -55,10 +62,24 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
 }
 
 PatPmtFinder patPmtFinder;
+AdtsFeeder audioDataFeeder(false);
+PesFeeder audioPesFeeder(audioDataFeeder, false);
+DebugDataFeeder videoDataFeeder(false);
+PesFeeder videoPesFeeder(videoDataFeeder, false);
+
+void setup() {
+  audioDataFeeder.setFoundCallback(
+      [](double timestamp, uint8_t *p, size_t size) {
+        // spdlog::debug("callback test timestamp:{} size:{}", timestamp, size);
+        callOnAudioFrame(timestamp, p, size);
+      });
+}
 
 void enqueueData(size_t nextSize) {
-  unsigned int count = 0;
   spdlog::set_level(spdlog::level::debug);
+  // spdlog::debug("enqueueData size:{}", nextSize);
+  auto start = std::chrono::high_resolution_clock::now();
+  unsigned int count = 0;
 
   assert(inputBufferWriteIndex + nextSize <= MAX_INPUT_BUFFER);
   inputBufferWriteIndex += nextSize;
@@ -78,16 +99,23 @@ void enqueueData(size_t nextSize) {
       patPmtFinder.feedPmtPacket(packet);
     } else if (patPmtFinder.isAudioPid(pid)) {
       // TODO: feed AudioPesStream
-      spdlog::debug("Found Audio PES packet: {:#06x}", pid);
+      audioPesFeeder.feedPesPacket(packet);
     } else if (patPmtFinder.isVideoPid(pid)) {
       // TODO: feed VideoPesStream
-      spdlog::debug("Found Video PES packet: {:#06x}", pid);
+      // spdlog::debug("Found Video PES packet: {:#06x}", pid);
+      videoPesFeeder.feedPesPacket(packet);
     } else {
       // spdlog::debug("Unknown PID:{:#04x} count:[{}] {}", pid, count,
       //               packet.header.toString());
     }
   }
-  // spdlog::debug("{} packets processed.", count);
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = end - start;
+  // spdlog::debug(
+  //     "{} packets processed. {} ms", count,
+  //     std::chrono::duration_cast<std::chrono::microseconds>(duration).count()
+  //     /
+  //         1000.0);
 }
 
 std::string getExceptionMessage(uintptr_t ptr) {
@@ -98,6 +126,7 @@ std::string getExceptionMessage(uintptr_t ptr) {
 } // namespace
 
 EMSCRIPTEN_BINDINGS(splitter_wasm_module) {
+  emscripten::function("setup", &setup);
   emscripten::function("getExceptionMessage", &getExceptionMessage,
                        emscripten::allow_raw_pointers());
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
