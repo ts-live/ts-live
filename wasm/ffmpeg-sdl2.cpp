@@ -392,8 +392,6 @@ void mainloop(void *arg) {
     //              currentFrame->height, bufferSize);
     uint8_t *buf;
     int pitch;
-    SDL_LockTexture(ctx->texture, NULL, reinterpret_cast<void **>(&buf),
-                    &pitch);
     AVFrame *currentFrame = nullptr;
     {
       std::lock_guard<std::mutex> lock(videoFrameMtx);
@@ -403,15 +401,15 @@ void mainloop(void *arg) {
     int bufferSize =
         av_image_get_buffer_size((AVPixelFormat)currentFrame->format,
                                  currentFrame->width, currentFrame->height, 1);
+    SDL_LockTexture(ctx->texture, NULL, reinterpret_cast<void **>(&buf),
+                    &pitch);
     av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
                             currentFrame->linesize,
                             (AVPixelFormat)currentFrame->format,
                             currentFrame->width, currentFrame->height, 1);
-    av_frame_free(&currentFrame);
     SDL_UnlockTexture(ctx->texture);
+    av_frame_free(&currentFrame);
 
-    // SDL_SetRenderDrawColor(ctx->renderer, 255, 0, 0, 255);
-    // SDL_RenderClear(ctx->renderer);
     SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
     SDL_RenderPresent(ctx->renderer);
   }
@@ -473,6 +471,7 @@ void mainloop(void *arg) {
                      SDL_GetQueuedAudioSize(ctx->dev));
       }
     }
+    av_frame_free(&frame);
   }
 }
 

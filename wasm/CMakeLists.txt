@@ -22,15 +22,15 @@ FetchContent_Declare(
 set(PTHREADS ON)
 set(PTHREADS_SEM ON)
 set(BENCHMARK_ENABLE_TESTING OFF)
-set(CMAKE_C_FLAGS "-matomics -mbulk-memory")
-set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory")
+set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
+set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128")
 FetchContent_MakeAvailable(fmt spdlog SDL2)
 
 set(FFMPEG_CONFIGURE_COMMAND_LIST
   emconfigure ./configure
     --prefix=${CMAKE_CURRENT_BINARY_DIR}/install
     --target-os=none
-    --arch=x86_32
+    --arch=wasm
     --enable-cross-compile
     --disable-x86asm
     --disable-inline-asm
@@ -41,6 +41,7 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --cxx=${CMAKE_CXX_COMPILER}
     --objcc=${CMAKE_C_COMPILER}
     --dep-cc=${CMAKE_C_COMPILER}
+    --extra-cflags="-msimd128 -matomics -mbulk-memory -funroll-loops"
     --disable-programs
     --disable-doc
     --disable-avdevice
@@ -53,7 +54,6 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-muxers
     --disable-demuxers
     --enable-demuxer=mpegts
-    --enable-demuxer=adts
     --disable-parsers
     --enable-parser=aac
     --enable-parser=mpegvideo
@@ -74,22 +74,23 @@ ExternalProject_Add(
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"
   BUILD_COMMAND ${CMAKE_COMMAND} -E env emmake make -j24
   INSTALL_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || make install"
+  PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-wasm.patch
 )
 
 
-add_executable(ts-splitter ts-splitter.cpp)
-target_link_libraries(ts-splitter fmt::fmt spdlog::spdlog)
-target_link_options(ts-splitter PRIVATE
-  "SHELL:-s ALLOW_MEMORY_GROWTH=1"
-  "SHELL:-s WASM=1"
-  "SHELL:-s MODULARIZE=1"
-  "SHELL:-s USE_PTHREADS=0"
-  "SHELL:-s EXPORT_NAME=createSplitterWasmModule"
-  "SHELL:--bind"
-)
+# add_executable(ts-splitter ts-splitter.cpp)
+# target_link_libraries(ts-splitter fmt::fmt spdlog::spdlog)
+# target_link_options(ts-splitter PRIVATE
+#   "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+#   "SHELL:-s WASM=1"
+#   "SHELL:-s MODULARIZE=1"
+#   "SHELL:-s USE_PTHREADS=0"
+#   "SHELL:-s EXPORT_NAME=createSplitterWasmModule"
+#   "SHELL:--bind"
+# )
 
-install(TARGETS ts-splitter DESTINATION .)
-install(FILES ${CMAKE_BINARY_DIR}/ts-splitter.wasm DESTINATION .)
+# install(TARGETS ts-splitter DESTINATION .)
+# install(FILES ${CMAKE_BINARY_DIR}/ts-splitter.wasm DESTINATION .)
 
 set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavcodec.a

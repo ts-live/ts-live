@@ -7,7 +7,10 @@
                 "${workspaceFolder}/wasm/build/",
                 "${HOME}/ghq/github.com/emscripten-core/emsdk/upstream/emscripten/system/include/"
             ],
-            "defines": [],
+            "defines": [
+                "EMSCRIPTEN=1",
+                "__EMSCRIPTEN__=1"
+            ],
             "compilerPath": "/usr/bin/clang-12",
             "cStandard": "c17",
             "cppStandard": "c++17",

@@ -1,0 +1,1087 @@
+diff --git a/configure b/configure
+index 6b5ef6332e..f4eb257cf9 100755
+--- a/configure
++++ b/configure
+@@ -2058,6 +2058,7 @@ ARCH_LIST="
+     x86
+     x86_32
+     x86_64
++    wasm
+ "
+ 
+ ARCH_EXT_LIST_ARM="
+@@ -5355,6 +5356,8 @@ elif enabled x86; then
+         ;;
+     esac
+ 
++elif enabled wasm; then
++    cpuflags="-msimd128"
+ fi
+ 
+ if [ "$cpu" != generic ]; then
+diff --git a/libavcodec/idctdsp.c b/libavcodec/idctdsp.c
+index 846ed0b0f8..333eef40f2 100644
+--- a/libavcodec/idctdsp.c
++++ b/libavcodec/idctdsp.c
+@@ -33,13 +33,15 @@ av_cold void ff_init_scantable(uint8_t *permutation, ScanTable *st,
+ 
+     st->scantable = src_scantable;
+ 
+-    for (i = 0; i < 64; i++) {
++    for (i = 0; i < 64; i++)
++    {
+         int j = src_scantable[i];
+         st->permutated[i] = permutation[j];
+     }
+ 
+     end = -1;
+-    for (i = 0; i < 64; i++) {
++    for (i = 0; i < 64; i++)
++    {
+         int j = st->permutated[i];
+         if (j > end)
+             end = j;
+@@ -57,7 +59,8 @@ av_cold void ff_init_scantable_permutation(uint8_t *idct_permutation,
+                                               perm_type))
+             return;
+ 
+-    switch (perm_type) {
++    switch (perm_type)
++    {
+     case FF_IDCT_PERM_NONE:
+         for (i = 0; i < 64; i++)
+             idct_permutation[i] = i;
+@@ -86,7 +89,8 @@ void ff_put_pixels_clamped_c(const int16_t *block, uint8_t *av_restrict pixels,
+     int i;
+ 
+     /* read the pixels */
+-    for (i = 0; i < 8; i++) {
++    for (i = 0; i < 8; i++)
++    {
+         pixels[0] = av_clip_uint8(block[0]);
+         pixels[1] = av_clip_uint8(block[1]);
+         pixels[2] = av_clip_uint8(block[2]);
+@@ -97,17 +101,18 @@ void ff_put_pixels_clamped_c(const int16_t *block, uint8_t *av_restrict pixels,
+         pixels[7] = av_clip_uint8(block[7]);
+ 
+         pixels += line_size;
+-        block  += 8;
++        block += 8;
+     }
+ }
+ 
+ static void put_pixels_clamped4_c(const int16_t *block, uint8_t *av_restrict pixels,
+-                                 int line_size)
++                                  int line_size)
+ {
+     int i;
+ 
+     /* read the pixels */
+-    for(i=0;i<4;i++) {
++    for (i = 0; i < 4; i++)
++    {
+         pixels[0] = av_clip_uint8(block[0]);
+         pixels[1] = av_clip_uint8(block[1]);
+         pixels[2] = av_clip_uint8(block[2]);
+@@ -119,12 +124,13 @@ static void put_pixels_clamped4_c(const int16_t *block, uint8_t *av_restrict pix
+ }
+ 
+ static void put_pixels_clamped2_c(const int16_t *block, uint8_t *av_restrict pixels,
+-                                 int line_size)
++                                  int line_size)
+ {
+     int i;
+ 
+     /* read the pixels */
+-    for(i=0;i<2;i++) {
++    for (i = 0; i < 2; i++)
++    {
+         pixels[0] = av_clip_uint8(block[0]);
+         pixels[1] = av_clip_uint8(block[1]);
+ 
+@@ -139,14 +145,16 @@ static void put_signed_pixels_clamped_c(const int16_t *block,
+ {
+     int i, j;
+ 
+-    for (i = 0; i < 8; i++) {
+-        for (j = 0; j < 8; j++) {
++    for (i = 0; i < 8; i++)
++    {
++        for (j = 0; j < 8; j++)
++        {
+             if (*block < -128)
+                 *pixels = 0;
+             else if (*block > 127)
+                 *pixels = 255;
+             else
+-                *pixels = (uint8_t) (*block + 128);
++                *pixels = (uint8_t)(*block + 128);
+             block++;
+             pixels++;
+         }
+@@ -160,7 +168,8 @@ void ff_add_pixels_clamped_c(const int16_t *block, uint8_t *av_restrict pixels,
+     int i;
+ 
+     /* read the pixels */
+-    for (i = 0; i < 8; i++) {
++    for (i = 0; i < 8; i++)
++    {
+         pixels[0] = av_clip_uint8(pixels[0] + block[0]);
+         pixels[1] = av_clip_uint8(pixels[1] + block[1]);
+         pixels[2] = av_clip_uint8(pixels[2] + block[2]);
+@@ -169,18 +178,19 @@ void ff_add_pixels_clamped_c(const int16_t *block, uint8_t *av_restrict pixels,
+         pixels[5] = av_clip_uint8(pixels[5] + block[5]);
+         pixels[6] = av_clip_uint8(pixels[6] + block[6]);
+         pixels[7] = av_clip_uint8(pixels[7] + block[7]);
+-        pixels   += line_size;
+-        block    += 8;
++        pixels += line_size;
++        block += 8;
+     }
+ }
+ 
+ static void add_pixels_clamped4_c(const int16_t *block, uint8_t *av_restrict pixels,
+-                          int line_size)
++                                  int line_size)
+ {
+     int i;
+ 
+     /* read the pixels */
+-    for(i=0;i<4;i++) {
++    for (i = 0; i < 4; i++)
++    {
+         pixels[0] = av_clip_uint8(pixels[0] + block[0]);
+         pixels[1] = av_clip_uint8(pixels[1] + block[1]);
+         pixels[2] = av_clip_uint8(pixels[2] + block[2]);
+@@ -191,12 +201,13 @@ static void add_pixels_clamped4_c(const int16_t *block, uint8_t *av_restrict pix
+ }
+ 
+ static void add_pixels_clamped2_c(const int16_t *block, uint8_t *av_restrict pixels,
+-                          int line_size)
++                                  int line_size)
+ {
+     int i;
+ 
+     /* read the pixels */
+-    for(i=0;i<2;i++) {
++    for (i = 0; i < 2; i++)
++    {
+         pixels[0] = av_clip_uint8(pixels[0] + block[0]);
+         pixels[1] = av_clip_uint8(pixels[1] + block[1]);
+         pixels += line_size;
+@@ -206,99 +217,119 @@ static void add_pixels_clamped2_c(const int16_t *block, uint8_t *av_restrict pix
+ 
+ static void ff_jref_idct4_put(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    ff_j_rev_dct4 (block);
++    ff_j_rev_dct4(block);
+     put_pixels_clamped4_c(block, dest, line_size);
+ }
+ static void ff_jref_idct4_add(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    ff_j_rev_dct4 (block);
++    ff_j_rev_dct4(block);
+     add_pixels_clamped4_c(block, dest, line_size);
+ }
+ 
+ static void ff_jref_idct2_put(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    ff_j_rev_dct2 (block);
++    ff_j_rev_dct2(block);
+     put_pixels_clamped2_c(block, dest, line_size);
+ }
+ static void ff_jref_idct2_add(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    ff_j_rev_dct2 (block);
++    ff_j_rev_dct2(block);
+     add_pixels_clamped2_c(block, dest, line_size);
+ }
+ 
+ static void ff_jref_idct1_put(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    dest[0] = av_clip_uint8((block[0] + 4)>>3);
++    dest[0] = av_clip_uint8((block[0] + 4) >> 3);
+ }
+ static void ff_jref_idct1_add(uint8_t *dest, ptrdiff_t line_size, int16_t *block)
+ {
+-    dest[0] = av_clip_uint8(dest[0] + ((block[0] + 4)>>3));
++    dest[0] = av_clip_uint8(dest[0] + ((block[0] + 4) >> 3));
+ }
+ 
+ av_cold void ff_idctdsp_init(IDCTDSPContext *c, AVCodecContext *avctx)
+ {
+     const unsigned high_bit_depth = avctx->bits_per_raw_sample > 8;
+ 
+-    if (avctx->lowres==1) {
+-        c->idct_put  = ff_jref_idct4_put;
+-        c->idct_add  = ff_jref_idct4_add;
+-        c->idct      = ff_j_rev_dct4;
++    if (avctx->lowres == 1)
++    {
++        c->idct_put = ff_jref_idct4_put;
++        c->idct_add = ff_jref_idct4_add;
++        c->idct = ff_j_rev_dct4;
+         c->perm_type = FF_IDCT_PERM_NONE;
+-    } else if (avctx->lowres==2) {
+-        c->idct_put  = ff_jref_idct2_put;
+-        c->idct_add  = ff_jref_idct2_add;
+-        c->idct      = ff_j_rev_dct2;
++    }
++    else if (avctx->lowres == 2)
++    {
++        c->idct_put = ff_jref_idct2_put;
++        c->idct_add = ff_jref_idct2_add;
++        c->idct = ff_j_rev_dct2;
+         c->perm_type = FF_IDCT_PERM_NONE;
+-    } else if (avctx->lowres==3) {
+-        c->idct_put  = ff_jref_idct1_put;
+-        c->idct_add  = ff_jref_idct1_add;
+-        c->idct      = ff_j_rev_dct1;
++    }
++    else if (avctx->lowres == 3)
++    {
++        c->idct_put = ff_jref_idct1_put;
++        c->idct_add = ff_jref_idct1_add;
++        c->idct = ff_j_rev_dct1;
+         c->perm_type = FF_IDCT_PERM_NONE;
+-    } else {
+-        if (avctx->bits_per_raw_sample == 10 || avctx->bits_per_raw_sample == 9) {
++    }
++    else
++    {
++        if (avctx->bits_per_raw_sample == 10 || avctx->bits_per_raw_sample == 9)
++        {
+             /* 10-bit MPEG-4 Simple Studio Profile requires a higher precision IDCT
+                However, it only uses idct_put */
+-            if (c->mpeg4_studio_profile) {
+-                c->idct_put              = ff_simple_idct_put_int32_10bit;
+-                c->idct_add              = NULL;
+-                c->idct                  = NULL;
+-            } else {
+-                c->idct_put              = ff_simple_idct_put_int16_10bit;
+-                c->idct_add              = ff_simple_idct_add_int16_10bit;
+-                c->idct                  = ff_simple_idct_int16_10bit;
++            if (c->mpeg4_studio_profile)
++            {
++                c->idct_put = ff_simple_idct_put_int32_10bit;
++                c->idct_add = NULL;
++                c->idct = NULL;
+             }
+-            c->perm_type             = FF_IDCT_PERM_NONE;
+-        } else if (avctx->bits_per_raw_sample == 12) {
+-            c->idct_put              = ff_simple_idct_put_int16_12bit;
+-            c->idct_add              = ff_simple_idct_add_int16_12bit;
+-            c->idct                  = ff_simple_idct_int16_12bit;
+-            c->perm_type             = FF_IDCT_PERM_NONE;
+-        } else {
+-            if (avctx->idct_algo == FF_IDCT_INT) {
+-                c->idct_put  = ff_jref_idct_put;
+-                c->idct_add  = ff_jref_idct_add;
+-                c->idct      = ff_j_rev_dct;
++            else
++            {
++                c->idct_put = ff_simple_idct_put_int16_10bit;
++                c->idct_add = ff_simple_idct_add_int16_10bit;
++                c->idct = ff_simple_idct_int16_10bit;
++            }
++            c->perm_type = FF_IDCT_PERM_NONE;
++        }
++        else if (avctx->bits_per_raw_sample == 12)
++        {
++            c->idct_put = ff_simple_idct_put_int16_12bit;
++            c->idct_add = ff_simple_idct_add_int16_12bit;
++            c->idct = ff_simple_idct_int16_12bit;
++            c->perm_type = FF_IDCT_PERM_NONE;
++        }
++        else
++        {
++            if (avctx->idct_algo == FF_IDCT_INT)
++            {
++                c->idct_put = ff_jref_idct_put;
++                c->idct_add = ff_jref_idct_add;
++                c->idct = ff_j_rev_dct;
+                 c->perm_type = FF_IDCT_PERM_LIBMPEG2;
+ #if CONFIG_FAANIDCT
+-            } else if (avctx->idct_algo == FF_IDCT_FAAN) {
+-                c->idct_put  = ff_faanidct_put;
+-                c->idct_add  = ff_faanidct_add;
+-                c->idct      = ff_faanidct;
++            }
++            else if (avctx->idct_algo == FF_IDCT_FAAN)
++            {
++                c->idct_put = ff_faanidct_put;
++                c->idct_add = ff_faanidct_add;
++                c->idct = ff_faanidct;
+                 c->perm_type = FF_IDCT_PERM_NONE;
+ #endif /* CONFIG_FAANIDCT */
+-            } else { // accurate/default
++            }
++            else
++            { // accurate/default
+                 /* Be sure FF_IDCT_NONE will select this one, since it uses FF_IDCT_PERM_NONE */
+-                c->idct_put  = ff_simple_idct_put_int16_8bit;
+-                c->idct_add  = ff_simple_idct_add_int16_8bit;
+-                c->idct      = ff_simple_idct_int16_8bit;
++                c->idct_put = ff_simple_idct_put_int16_8bit;
++                c->idct_add = ff_simple_idct_add_int16_8bit;
++                c->idct = ff_simple_idct_int16_8bit;
+                 c->perm_type = FF_IDCT_PERM_NONE;
+             }
+         }
+     }
+ 
+-    c->put_pixels_clamped        = ff_put_pixels_clamped_c;
++    c->put_pixels_clamped = ff_put_pixels_clamped_c;
+     c->put_signed_pixels_clamped = put_signed_pixels_clamped_c;
+-    c->add_pixels_clamped        = ff_add_pixels_clamped_c;
++    c->add_pixels_clamped = ff_add_pixels_clamped_c;
+ 
+     if (CONFIG_MPEG4_DECODER && avctx->idct_algo == FF_IDCT_XVID)
+         ff_xvid_idct_init(c, avctx);
+@@ -315,6 +346,8 @@ av_cold void ff_idctdsp_init(IDCTDSPContext *c, AVCodecContext *avctx)
+         ff_idctdsp_init_x86(c, avctx, high_bit_depth);
+     if (ARCH_MIPS)
+         ff_idctdsp_init_mips(c, avctx, high_bit_depth);
++    if (ARCH_WASM)
++        ff_idctdsp_init_wasm(c, avctx, high_bit_depth);
+ 
+     ff_init_scantable_permutation(c->idct_permutation,
+                                   c->perm_type);
+diff --git a/libavcodec/idctdsp.h b/libavcodec/idctdsp.h
+index ca21a31a02..d34f16342a 100644
+--- a/libavcodec/idctdsp.h
++++ b/libavcodec/idctdsp.h
+@@ -28,13 +28,15 @@
+ /**
+  * Scantable.
+  */
+-typedef struct ScanTable {
++typedef struct ScanTable
++{
+     const uint8_t *scantable;
+     uint8_t permutated[64];
+     uint8_t raster_end[64];
+ } ScanTable;
+ 
+-enum idct_permutation_type {
++enum idct_permutation_type
++{
+     FF_IDCT_PERM_NONE,
+     FF_IDCT_PERM_LIBMPEG2,
+     FF_IDCT_PERM_SIMPLE,
+@@ -50,7 +52,8 @@ void ff_init_scantable_permutation(uint8_t *idct_permutation,
+ int ff_init_scantable_permutation_x86(uint8_t *idct_permutation,
+                                       enum idct_permutation_type perm_type);
+ 
+-typedef struct IDCTDSPContext {
++typedef struct IDCTDSPContext
++{
+     /* pixel ops : interface with DCT */
+     void (*put_pixels_clamped)(const int16_t *block /* align 16 */,
+                                uint8_t *av_restrict pixels /* align 8 */,
+@@ -118,5 +121,7 @@ void ff_idctdsp_init_x86(IDCTDSPContext *c, AVCodecContext *avctx,
+                          unsigned high_bit_depth);
+ void ff_idctdsp_init_mips(IDCTDSPContext *c, AVCodecContext *avctx,
+                           unsigned high_bit_depth);
++void ff_idctdsp_init_wasm(IDCTDSPContext *c, AVCodecContext *avctx,
++                          unsigned high_bit_depth);
+ 
+ #endif /* AVCODEC_IDCTDSP_H */
+diff --git a/libavcodec/wasm/Makefile b/libavcodec/wasm/Makefile
+new file mode 100644
+index 0000000000..ad4d60b2a4
+--- /dev/null
++++ b/libavcodec/wasm/Makefile
+@@ -0,0 +1 @@
++OBJS-$(CONFIG_IDCTDSP)          += wasm/idctdsp.o
+diff --git a/libavcodec/wasm/idctdsp.c b/libavcodec/wasm/idctdsp.c
+new file mode 100644
+index 0000000000..9b2bf919c2
+--- /dev/null
++++ b/libavcodec/wasm/idctdsp.c
+@@ -0,0 +1,685 @@
++#include "config.h"
++#include "libavutil/attributes.h"
++#include "libavutil/cpu.h"
++#include "libavutil/x86/cpu.h"
++#include "libavcodec/avcodec.h"
++#include "libavcodec/idctdsp.h"
++#include "libavcodec/simple_idct.h"
++
++#include "libavutil/intreadwrite.h"
++#include "libavutil/common.h"
++
++#define av_clip_pixel(a) ((a & (~0xFF) ? (~a) >> 31 : a))
++
++#define SUINT int32_t
++
++#define W1 22725 //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W2 21407 //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W3 19266 //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W4 16383 //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W5 12873 //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W6 8867  //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++#define W7 4520  //cos(i*M_PI/16)*sqrt(2)*(1<<14) + 0.5
++
++#define ROW_SHIFT 11
++#define COL_SHIFT 20
++#define DC_SHIFT 3
++
++/* signed 16x16 -> 32 multiply add accumulate */
++#define MAC16(rt, ra, rb) rt += (ra) * (rb)
++/* signed 16x16 -> 32 multiply */
++#define MUL16(ra, rb) ((ra) * (rb))
++
++#define MUL(a, b) MUL16(a, b)
++#define MAC(a, b, c) MAC16(a, b, c)
++
++static inline void idctSparseCol_int16_8bit_wasm(int16_t *col)
++{
++    unsigned a0, a1, a2, a3, b0, b1, b2, b3;
++
++    a0 = (SUINT)W4 * (col[8 * 0] + ((1 << (COL_SHIFT - 1)) / W4));
++    a1 = a0;
++    a2 = a0;
++    a3 = a0;
++
++    a0 += (SUINT)W2 * col[8 * 2];
++    a1 += (SUINT)W6 * col[8 * 2];
++    a2 += (SUINT)-W6 * col[8 * 2];
++    a3 += (SUINT)-W2 * col[8 * 2];
++
++    b0 = MUL(W1, col[8 * 1]);
++    b1 = MUL(W3, col[8 * 1]);
++    b2 = MUL(W5, col[8 * 1]);
++    b3 = MUL(W7, col[8 * 1]);
++
++    MAC(b0, W3, col[8 * 3]);
++    MAC(b1, -W7, col[8 * 3]);
++    MAC(b2, -W1, col[8 * 3]);
++    MAC(b3, -W5, col[8 * 3]);
++
++    if (col[8 * 4])
++    {
++        a0 += (SUINT)W4 * col[8 * 4];
++        a1 += (SUINT)-W4 * col[8 * 4];
++        a2 += (SUINT)-W4 * col[8 * 4];
++        a3 += (SUINT)W4 * col[8 * 4];
++    }
++
++    if (col[8 * 5])
++    {
++        MAC(b0, W5, col[8 * 5]);
++        MAC(b1, -W1, col[8 * 5]);
++        MAC(b2, W7, col[8 * 5]);
++        MAC(b3, W3, col[8 * 5]);
++    }
++
++    if (col[8 * 6])
++    {
++        a0 += (SUINT)W6 * col[8 * 6];
++        a1 += (SUINT)-W2 * col[8 * 6];
++        a2 += (SUINT)W2 * col[8 * 6];
++        a3 += (SUINT)-W6 * col[8 * 6];
++    }
++
++    if (col[8 * 7])
++    {
++        MAC(b0, W7, col[8 * 7]);
++        MAC(b1, -W5, col[8 * 7]);
++        MAC(b2, W3, col[8 * 7]);
++        MAC(b3, -W1, col[8 * 7]);
++    }
++
++    col[0] = ((int)(a0 + b0) >> COL_SHIFT);
++    col[8] = ((int)(a1 + b1) >> COL_SHIFT);
++    col[16] = ((int)(a2 + b2) >> COL_SHIFT);
++    col[24] = ((int)(a3 + b3) >> COL_SHIFT);
++    col[32] = ((int)(a3 - b3) >> COL_SHIFT);
++    col[40] = ((int)(a2 - b2) >> COL_SHIFT);
++    col[48] = ((int)(a1 - b1) >> COL_SHIFT);
++    col[56] = ((int)(a0 - b0) >> COL_SHIFT);
++}
++
++static inline void idctSparseCol_int16_8bit_wasm_simd(int16_t *col)
++{
++    SUINT a0[8], a1[8], a2[8], a3[8], b0[8], b1[8], b2[8], b3[8];
++    int16_t c0[8], c1[8], c2[8], c3[8], c4[8], c5[8], c6[8], c7[8];
++
++    for (int i = 0; i < 8; i++)
++        c0[i] = col[8 * 0 + i];
++    for (int i = 0; i < 8; i++)
++        c1[i] = col[8 * 1 + i];
++    for (int i = 0; i < 8; i++)
++        c2[i] = col[8 * 2 + i];
++    for (int i = 0; i < 8; i++)
++        c3[i] = col[8 * 3 + i];
++    for (int i = 0; i < 8; i++)
++        c4[i] = col[8 * 4 + i];
++    for (int i = 0; i < 8; i++)
++        c5[i] = col[8 * 5 + i];
++    for (int i = 0; i < 8; i++)
++        c6[i] = col[8 * 6 + i];
++    for (int i = 0; i < 8; i++)
++        c7[i] = col[8 * 7 + i];
++
++    for (int i = 0; i < 8; i++)
++        a0[i] = (SUINT)W4 * (c0[i] + ((1 << (COL_SHIFT - 1)) / W4));
++    for (int i = 0; i < 8; i++)
++        a1[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a2[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a3[i] = a0[i];
++
++    // a0/b0
++    for (int i = 0; i < 8; i++)
++        a0[i] += (SUINT)W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b0[i] = MUL(W1, c1[i]) + W3 * c3[i] + W5 * c5[i] + W7 * c7[i];
++
++    // a1/b1
++    for (int i = 0; i < 8; i++)
++        a1[i] += (SUINT)W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)-W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b1[i] = MUL(W3, c1[i]) + -W7 * c3[i] + -W1 * c5[i] + -W5 * c7[i];
++
++    // a2/b2
++    for (int i = 0; i < 8; i++)
++        a2[i] += (SUINT)-W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b2[i] = MUL(W5, c1[i]) + -W1 * c3[i] + W7 * c5[i] + W3 * c7[i];
++
++    // a3/b3
++    for (int i = 0; i < 8; i++)
++        a3[i] += (SUINT)-W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)-W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b3[i] = MUL(W7, c1[i]) + -W5 * c3[i] + W3 * c5[i] + -W1 * c7[i];
++
++    for (int i = 0; i < 8; i++)
++        col[i + 0] = ((int)(a0[i] + b0[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 8] = ((int)(a1[i] + b1[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 16] = ((int)(a2[i] + b2[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 24] = ((int)(a3[i] + b3[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 32] = ((int)(a3[i] - b3[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 40] = ((int)(a2[i] - b2[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 48] = ((int)(a1[i] - b1[i]) >> COL_SHIFT);
++    for (int i = 0; i < 8; i++)
++        col[i + 56] = ((int)(a0[i] - b0[i]) >> COL_SHIFT);
++}
++
++static inline void idctSparseColAdd_int16_8bit_wasm(uint8_t *dest, ptrdiff_t line_size,
++                                                    int16_t *col)
++{
++    unsigned a0, a1, a2, a3, b0, b1, b2, b3;
++
++    a0 = (SUINT)W4 * (col[8 * 0] + ((1 << (COL_SHIFT - 1)) / W4));
++    a1 = a0;
++    a2 = a0;
++    a3 = a0;
++
++    a0 += (SUINT)W2 * col[8 * 2];
++    a1 += (SUINT)W6 * col[8 * 2];
++    a2 += (SUINT)-W6 * col[8 * 2];
++    a3 += (SUINT)-W2 * col[8 * 2];
++
++    b0 = MUL(W1, col[8 * 1]);
++    b1 = MUL(W3, col[8 * 1]);
++    b2 = MUL(W5, col[8 * 1]);
++    b3 = MUL(W7, col[8 * 1]);
++
++    MAC(b0, W3, col[8 * 3]);
++    MAC(b1, -W7, col[8 * 3]);
++    MAC(b2, -W1, col[8 * 3]);
++    MAC(b3, -W5, col[8 * 3]);
++
++    if (col[8 * 4])
++    {
++        a0 += (SUINT)W4 * col[8 * 4];
++        a1 += (SUINT)-W4 * col[8 * 4];
++        a2 += (SUINT)-W4 * col[8 * 4];
++        a3 += (SUINT)W4 * col[8 * 4];
++    }
++
++    if (col[8 * 5])
++    {
++        MAC(b0, W5, col[8 * 5]);
++        MAC(b1, -W1, col[8 * 5]);
++        MAC(b2, W7, col[8 * 5]);
++        MAC(b3, W3, col[8 * 5]);
++    }
++
++    if (col[8 * 6])
++    {
++        a0 += (SUINT)W6 * col[8 * 6];
++        a1 += (SUINT)-W2 * col[8 * 6];
++        a2 += (SUINT)W2 * col[8 * 6];
++        a3 += (SUINT)-W6 * col[8 * 6];
++    }
++
++    if (col[8 * 7])
++    {
++        MAC(b0, W7, col[8 * 7]);
++        MAC(b1, -W5, col[8 * 7]);
++        MAC(b2, W3, col[8 * 7]);
++        MAC(b3, -W1, col[8 * 7]);
++    }
++
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a0 + b0) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a1 + b1) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a2 + b2) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a3 + b3) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a3 - b3) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a2 - b2) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a1 - b1) >> COL_SHIFT));
++    dest += line_size;
++    dest[0] = av_clip_pixel(dest[0] + ((int)(a0 - b0) >> COL_SHIFT));
++}
++
++static inline void idctSparseColAdd_int16_8bit_wasm_simd(uint8_t *dest, ptrdiff_t line_size,
++                                                         int16_t *col)
++{
++    SUINT a0[8], a1[8], a2[8], a3[8], b0[8], b1[8], b2[8], b3[8];
++    int16_t c0[8], c1[8], c2[8], c3[8], c4[8], c5[8], c6[8], c7[8];
++
++    for (int i = 0; i < 8; i++)
++        c0[i] = col[8 * 0 + i];
++    for (int i = 0; i < 8; i++)
++        c1[i] = col[8 * 1 + i];
++    for (int i = 0; i < 8; i++)
++        c2[i] = col[8 * 2 + i];
++    for (int i = 0; i < 8; i++)
++        c3[i] = col[8 * 3 + i];
++    for (int i = 0; i < 8; i++)
++        c4[i] = col[8 * 4 + i];
++    for (int i = 0; i < 8; i++)
++        c5[i] = col[8 * 5 + i];
++    for (int i = 0; i < 8; i++)
++        c6[i] = col[8 * 6 + i];
++    for (int i = 0; i < 8; i++)
++        c7[i] = col[8 * 7 + i];
++
++    for (int i = 0; i < 8; i++)
++        a0[i] = (SUINT)W4 * (c0[i] + ((1 << (COL_SHIFT - 1)) / W4));
++    for (int i = 0; i < 8; i++)
++        a1[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a2[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a3[i] = a0[i];
++
++    // a0/b0
++    for (int i = 0; i < 8; i++)
++        a0[i] += (SUINT)W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b0[i] = MUL(W1, c1[i]) + W3 * c3[i] + W5 * c5[i] + W7 * c7[i];
++
++    // a1/b1
++    for (int i = 0; i < 8; i++)
++        a1[i] += (SUINT)W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)-W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b1[i] = MUL(W3, c1[i]) + -W7 * c3[i] + -W1 * c5[i] + -W5 * c7[i];
++
++    // a2/b2
++    for (int i = 0; i < 8; i++)
++        a2[i] += (SUINT)-W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b2[i] = MUL(W5, c1[i]) + -W1 * c3[i] + W7 * c5[i] + W3 * c7[i];
++
++    // a3/b3
++    for (int i = 0; i < 8; i++)
++        a3[i] += (SUINT)-W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)-W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b3[i] = MUL(W7, c1[i]) + -W5 * c3[i] + W3 * c5[i] + -W1 * c7[i];
++
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a0[i] + b0[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a1[i] + b1[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a2[i] + b2[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a3[i] + b3[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a3[i] - b3[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a2[i] - b2[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a1[i] - b1[i]) >> COL_SHIFT));
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i] = av_clip_pixel(dest[i] + ((int)(a0[i] - b0[i]) >> COL_SHIFT));
++}
++
++static inline void idctSparseColPut_int16_8bit_wasm(uint8_t *dest, ptrdiff_t line_size,
++                                                    int16_t *col)
++{
++    SUINT a0, a1, a2, a3, b0, b1, b2, b3;
++
++    a0 = (SUINT)W4 * (col[8 * 0] + ((1 << (COL_SHIFT - 1)) / W4));
++    a1 = a0;
++    a2 = a0;
++    a3 = a0;
++
++    a0 += (SUINT)W2 * col[8 * 2];
++    a1 += (SUINT)W6 * col[8 * 2];
++    a2 += (SUINT)-W6 * col[8 * 2];
++    a3 += (SUINT)-W2 * col[8 * 2];
++
++    b0 = MUL(W1, col[8 * 1]);
++    b1 = MUL(W3, col[8 * 1]);
++    b2 = MUL(W5, col[8 * 1]);
++    b3 = MUL(W7, col[8 * 1]);
++
++    MAC(b0, W3, col[8 * 3]);
++    MAC(b1, -W7, col[8 * 3]);
++    MAC(b2, -W1, col[8 * 3]);
++    MAC(b3, -W5, col[8 * 3]);
++
++    if (col[8 * 4])
++    {
++        a0 += (SUINT)W4 * col[8 * 4];
++        a1 += (SUINT)-W4 * col[8 * 4];
++        a2 += (SUINT)-W4 * col[8 * 4];
++        a3 += (SUINT)W4 * col[8 * 4];
++    }
++
++    if (col[8 * 5])
++    {
++        MAC(b0, W5, col[8 * 5]);
++        MAC(b1, -W1, col[8 * 5]);
++        MAC(b2, W7, col[8 * 5]);
++        MAC(b3, W3, col[8 * 5]);
++    }
++
++    if (col[8 * 6])
++    {
++        a0 += (SUINT)W6 * col[8 * 6];
++        a1 += (SUINT)-W2 * col[8 * 6];
++        a2 += (SUINT)W2 * col[8 * 6];
++        a3 += (SUINT)-W6 * col[8 * 6];
++    }
++
++    if (col[8 * 7])
++    {
++        MAC(b0, W7, col[8 * 7]);
++        MAC(b1, -W5, col[8 * 7]);
++        MAC(b2, W3, col[8 * 7]);
++        MAC(b3, -W1, col[8 * 7]);
++    }
++
++    dest[0] = av_clip_pixel((int)(a0 + b0) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a1 + b1) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a2 + b2) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a3 + b3) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a3 - b3) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a2 - b2) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a1 - b1) >> COL_SHIFT);
++    dest += line_size;
++    dest[0] = av_clip_pixel((int)(a0 - b0) >> COL_SHIFT);
++}
++
++static inline void idctSparseColPut_int16_8bit_wasm_simd(uint8_t *dest, ptrdiff_t line_size,
++                                                         int16_t *col)
++{
++    SUINT a0[8], a1[8], a2[8], a3[8], b0[8], b1[8], b2[8], b3[8];
++    int16_t c0[8], c1[8], c2[8], c3[8], c4[8], c5[8], c6[8], c7[8];
++
++    for (int i = 0; i < 8; i++)
++        c0[i] = col[8 * 0 + i];
++    for (int i = 0; i < 8; i++)
++        c1[i] = col[8 * 1 + i];
++    for (int i = 0; i < 8; i++)
++        c2[i] = col[8 * 2 + i];
++    for (int i = 0; i < 8; i++)
++        c3[i] = col[8 * 3 + i];
++    for (int i = 0; i < 8; i++)
++        c4[i] = col[8 * 4 + i];
++    for (int i = 0; i < 8; i++)
++        c5[i] = col[8 * 5 + i];
++    for (int i = 0; i < 8; i++)
++        c6[i] = col[8 * 6 + i];
++    for (int i = 0; i < 8; i++)
++        c7[i] = col[8 * 7 + i];
++
++    for (int i = 0; i < 8; i++)
++        a0[i] = (SUINT)W4 * (c0[i] + ((1 << (COL_SHIFT - 1)) / W4));
++    for (int i = 0; i < 8; i++)
++        a1[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a2[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a3[i] = a0[i];
++
++    // a0/b0
++    for (int i = 0; i < 8; i++)
++        a0[i] += (SUINT)W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b0[i] = MUL(W1, c1[i]) + W3 * c3[i] + W5 * c5[i] + W7 * c7[i];
++
++    // a1/b1
++    for (int i = 0; i < 8; i++)
++        a1[i] += (SUINT)W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)-W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b1[i] = MUL(W3, c1[i]) + -W7 * c3[i] + -W1 * c5[i] + -W5 * c7[i];
++
++    // a2/b2
++    for (int i = 0; i < 8; i++)
++        a2[i] += (SUINT)-W6 * c2[i] + (SUINT)-W4 * c4[i] + (SUINT)W2 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b2[i] = MUL(W5, c1[i]) + -W1 * c3[i] + W7 * c5[i] + W3 * c7[i];
++
++    // a3/b3
++    for (int i = 0; i < 8; i++)
++        a3[i] += (SUINT)-W2 * c2[i] + (SUINT)W4 * c4[i] + (SUINT)-W6 * c6[i];
++    for (int i = 0; i < 8; i++)
++        b3[i] = MUL(W7, c1[i]) + -W5 * c3[i] + W3 * c5[i] + -W1 * c7[i];
++
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a0[i] + b0[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a1[i] + b1[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a2[i] + b2[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a3[i] + b3[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a3[i] - b3[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a2[i] - b2[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a1[i] - b1[i]) >> COL_SHIFT);
++    dest += line_size;
++    for (int i = 0; i < 8; i++)
++        dest[i + 0] = av_clip_pixel((int)(a0[i] - b0[i]) >> COL_SHIFT);
++}
++
++static inline void idctRowCondDC_int16_8bit_wasm(int16_t *row, int extra_shift)
++{
++    SUINT a0, a1, a2, a3, b0, b1, b2, b3;
++
++    // TODO: Add DC-only support for int32_t input
++    a0 = ((SUINT)W4 * row[0]) + (1 << (ROW_SHIFT + extra_shift - 1));
++    a1 = a0;
++    a2 = a0;
++    a3 = a0;
++
++    a0 += (SUINT)W2 * row[2];
++    a1 += (SUINT)W6 * row[2];
++    a2 -= (SUINT)W6 * row[2];
++    a3 -= (SUINT)W2 * row[2];
++
++    b0 = MUL(W1, row[1]);
++    MAC(b0, W3, row[3]);
++    b1 = MUL(W3, row[1]);
++    MAC(b1, -W7, row[3]);
++    b2 = MUL(W5, row[1]);
++    MAC(b2, -W1, row[3]);
++    b3 = MUL(W7, row[1]);
++    MAC(b3, -W5, row[3]);
++
++    if (AV_RN64A(row + 4))
++    {
++        a0 += (SUINT)W4 * row[8] + (SUINT)W6 * row[6];
++        a1 += (SUINT)-W4 * row[8] - (SUINT)W2 * row[6];
++        a2 += (SUINT)-W4 * row[8] + (SUINT)W2 * row[6];
++        a3 += (SUINT)W4 * row[8] - (SUINT)W6 * row[6];
++
++        MAC(b0, W5, row[5]);
++        MAC(b0, W7, row[7]);
++
++        MAC(b1, -W1, row[5]);
++        MAC(b1, -W5, row[7]);
++
++        MAC(b2, W7, row[5]);
++        MAC(b2, W3, row[7]);
++
++        MAC(b3, W3, row[5]);
++        MAC(b3, -W1, row[7]);
++    }
++
++    row[0] = (int)(a0 + b0) >> (ROW_SHIFT + extra_shift);
++    row[7] = (int)(a0 - b0) >> (ROW_SHIFT + extra_shift);
++    row[1] = (int)(a1 + b1) >> (ROW_SHIFT + extra_shift);
++    row[6] = (int)(a1 - b1) >> (ROW_SHIFT + extra_shift);
++    row[2] = (int)(a2 + b2) >> (ROW_SHIFT + extra_shift);
++    row[5] = (int)(a2 - b2) >> (ROW_SHIFT + extra_shift);
++    row[3] = (int)(a3 + b3) >> (ROW_SHIFT + extra_shift);
++    row[8] = (int)(a3 - b3) >> (ROW_SHIFT + extra_shift);
++}
++
++static void idctRowCondDC_int16_8bit_wasm_simd(int16_t *row)
++{
++    SUINT a0[8], a1[8], a2[8], a3[8], b0[8], b1[8], b2[8], b3[8];
++    int16_t r0[8], r1[8], r2[8], r3[8], r4[8], r5[8], r6[8], r7[8];
++
++    int flag[8];
++    for (int i = 0; i < 8; i++)
++        flag[i] = AV_RN64A(row + i * 8 + 4) ? 1 : 0;
++
++    for (int i = 0; i < 8; i++)
++        r0[i] = row[i * 8 + 0];
++    for (int i = 0; i < 8; i++)
++        r1[i] = row[i * 8 + 1];
++    for (int i = 0; i < 8; i++)
++        r2[i] = row[i * 8 + 2];
++    for (int i = 0; i < 8; i++)
++        r3[i] = row[i * 8 + 3];
++    for (int i = 0; i < 8; i++)
++        r4[i] = row[i * 8 + 4];
++    for (int i = 0; i < 8; i++)
++        r5[i] = row[i * 8 + 5];
++    for (int i = 0; i < 8; i++)
++        r6[i] = row[i * 8 + 6];
++    for (int i = 0; i < 8; i++)
++        r7[i] = row[i * 8 + 7];
++
++    for (int i = 0; i < 8; i++)
++        a0[i] = ((SUINT)W4 * r0[i]) + (1 << (ROW_SHIFT - 1));
++    for (int i = 0; i < 8; i++)
++        a1[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a2[i] = a0[i];
++    for (int i = 0; i < 8; i++)
++        a3[i] = a0[i];
++
++    // a0/b0
++    for (int i = 0; i < 8; i++)
++        a0[i] += (SUINT)W2 * r2[i] + flag[i] * (SUINT)W4 * r4[i] + flag[i] * (SUINT)W6 * r6[i];
++    for (int i = 0; i < 8; i++)
++        b0[i] = W1 * r1[i] + W3 * r3[i] + flag[i] * W5 * r5[i] + flag[i] * W7 * r7[i];
++
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 0] = (int)(a0[i] + b0[i]) >> ROW_SHIFT;
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 7] = (int)(a0[i] - b0[i]) >> ROW_SHIFT;
++
++    // a1/b1
++    for (int i = 0; i < 8; i++)
++        a1[i] += (SUINT)W6 * r2[i] + flag[i] * (SUINT)-W4 * r4[i] - flag[i] * (SUINT)W2 * r6[i];
++
++    for (int i = 0; i < 8; i++)
++        b1[i] = W3 * r1[i] - W7 * r3[i] + flag[i] * -W1 * r5[i] + flag[i] * -W5 * r7[i];
++
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 1] = (int)(a1[i] + b1[i]) >> ROW_SHIFT;
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 6] = (int)(a1[i] - b1[i]) >> ROW_SHIFT;
++
++    // a2/b2
++    for (int i = 0; i < 8; i++)
++        a2[i] -= (SUINT)W6 * r2[i] + flag[i] * (SUINT)-W4 * r4[i] + flag[i] * (SUINT)W2 * r6[i];
++
++    for (int i = 0; i < 8; i++)
++        b2[i] = W5 * r1[i] - W1 * r3[i] + flag[i] * W7 * r5[i] + flag[i] * W3 * r7[i];
++
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 2] = (int)(a2[i] + b2[i]) >> ROW_SHIFT;
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 5] = (int)(a2[i] - b2[i]) >> ROW_SHIFT;
++
++    // a3/b3
++    for (int i = 0; i < 8; i++)
++        a3[i] -= (SUINT)W2 * r2[i] + flag[i] * (SUINT)W4 * r4[i] - flag[i] * (SUINT)W6 * r6[i];
++
++    for (int i = 0; i < 8; i++)
++        b3[i] = W7 * r1[i] - W5 * r3[i] + flag[i] * W3 * r5[i] + flag[i] * -W1 * r7[i];
++
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 3] = (int)(a3[i] + b3[i]) >> ROW_SHIFT;
++    for (int i = 0; i < 8; i++)
++        row[i * 8 + 4] = (int)(a3[i] - b3[i]) >> ROW_SHIFT;
++}
++
++static void ff_idct_put_wasm(uint8_t *dest_, ptrdiff_t line_size, int16_t *block_)
++{
++    int16_t *block = (int16_t *)block_;
++    uint8_t *dest = (uint8_t *)dest_;
++
++    line_size /= sizeof(uint8_t);
++
++    // for (int i = 0; i < 8; i++)
++    //     idctRowCondDC_int16_8bit_wasm(block + i * 8, 0);
++    idctRowCondDC_int16_8bit_wasm_simd(block);
++
++    // for (int i = 0; i < 8; i++)
++    //     idctSparseColPut_int16_8bit_wasm(dest + i, line_size, block + i);
++    idctSparseColPut_int16_8bit_wasm_simd(dest, line_size, block);
++}
++
++static void ff_idct_add_wasm(uint8_t *dest_, ptrdiff_t line_size, int16_t *block)
++{
++    uint8_t *dest = (uint8_t *)dest_;
++
++    line_size /= sizeof(uint8_t);
++
++    // for (i = 0; i < 8; i++)
++    //     FUNC6(idctRowCondDC)
++    //     (block + i * 8, 0);
++    // for (int i = 0; i < 8; i++)
++    //     idctRowCondDC_int16_8bit_wasm(block + i * 8, 0);
++    idctRowCondDC_int16_8bit_wasm_simd(block);
++
++    // for (int i = 0; i < 8; i++)
++    //     idctSparseColAdd_int16_8bit_wasm(dest + i, line_size, block + i);
++    idctSparseColAdd_int16_8bit_wasm_simd(dest, line_size, block);
++}
++
++static void ff_idct_wasm(int16_t *block)
++{
++    // for (int i = 0; i < 8; i++)
++    //     idctRowCondDC_int16_8bit_wasm(block + i * 8, 0);
++    idctRowCondDC_int16_8bit_wasm_simd(block);
++
++    // for (int i = 0; i < 8; i++)
++    //     idctSparseCol_int16_8bit_wasm(block + i);
++    idctSparseCol_int16_8bit_wasm_simd(block);
++}
++
++av_cold void ff_idctdsp_init_wasm(IDCTDSPContext *c, AVCodecContext *avctx,
++                                  unsigned high_bit_depth)
++{
++    //av_log(NULL, AV_LOG_WARNING, "ff_idctdsp_init_wasm called. avctx->lowres:%d avctx->bits_per_raw_sample:%d avctx->idct_algo:%d\n", avctx->lowres, avctx->bits_per_raw_sample, avctx->idct_algo);
++    //ffmpeg-sdl2.js:1 ff_idctdsp_init_wasm called. avctx->lowres:0 avctx->bits_per_raw_sample:0 avctx->idct_algo:0
++
++    // これ
++    // { // accurate/default
++    //     /* Be sure FF_IDCT_NONE will select this one, since it uses FF_IDCT_PERM_NONE */
++    //     c->idct_put = ff_simple_idct_put_int16_8bit;
++    //     c->idct_add = ff_simple_idct_add_int16_8bit;
++    //     c->idct = ff_simple_idct_int16_8bit;
++    //     c->perm_type = FF_IDCT_PERM_NONE;
++    // }
++    c->idct_put = ff_idct_put_wasm;
++    c->idct_add = ff_idct_add_wasm;
++    c->idct = ff_idct_wasm;
++    c->perm_type = FF_IDCT_PERM_NONE;
++}
