@@ -24,50 +24,36 @@ const Page: NextPage = () => {
       // headers: { Accept: 'video/MP2T', 'Accept-Encoding': 'chunked' }
       headers: { 'X-Mirakurun-Priority': '0' }
     }).then(response => {
-      return response.body?.pipeTo(
-        new WritableStream<Uint8Array>({
-          async write (chunk) {
-            try {
-              // await prevPromise
-              const buffer = Module.getNextInputBuffer(chunk.length)
-              buffer.set(chunk)
-              // console.debug('calling enqueueData', chunk.length)
-              Module.commitInputData(chunk.length)
-              // console.debug('enqueData done.')
-            } catch (ex) {
-              if (typeof ex === 'number') {
-                console.error(Module.getExceptionMsg(ex))
-                throw ex
-              }
-              console.error('enqueueData exception', ex)
-            }
-            const currentTime = performance.now()
-            const timeElapsed = (currentTime - startTime) / 1000.0
-            const maxTimestampTime = maxTimestamp / 1000000.0
-            const waitTime = (maxTimestampTime - timeElapsed - 0.3) * 1000
-            // console.debug(
-            //   'waitTime:',
-            //   waitTime,
-            //   currentTime,
-            //   startTime,
-            //   timeElapsed,
-            //   maxTimestamp,
-            //   maxTimestampTime
-            // )
-            if (waitTime > 0) {
-              return new Promise<void>(res => setTimeout(res, waitTime))
-            } else {
-              return new Promise<void>(res => res())
-            }
-          },
-          close () {
-            console.log('WritableStream close')
-          },
-          abort (e) {
-            console.log('WritableStream abort', e)
+      if (!response.body) {
+        console.error('response body is not supplied.')
+        return
+      }
+      const reader = response.body.getReader()
+      reader.read().then(function processData ({ done, value }): Promise<void> {
+        if (done) {
+          console.log('Stream completed?')
+          return new Promise(res => res)
+        }
+        if (!value) {
+          console.warn('value is undefined.')
+          return reader.read().then(processData)
+        }
+        try {
+          // await prevPromise
+          const buffer = Module.getNextInputBuffer(value.length)
+          buffer.set(value)
+          // console.debug('calling enqueueData', chunk.length)
+          Module.commitInputData(value.length)
+          // console.debug('enqueData done.')
+        } catch (ex) {
+          if (typeof ex === 'number') {
+            console.error(Module.getExceptionMsg(ex))
+            throw ex
           }
-        })
-      )
+        }
+
+        return reader.read().then(processData)
+      })
     })
   }
 
