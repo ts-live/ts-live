@@ -23,37 +23,30 @@ const Page: NextPage = () => {
       // mode: 'no-cors',
       // headers: { Accept: 'video/MP2T', 'Accept-Encoding': 'chunked' }
       headers: { 'X-Mirakurun-Priority': '0' }
-    }).then(response => {
+    }).then(async response => {
       if (!response.body) {
         console.error('response body is not supplied.')
         return
       }
       const reader = response.body.getReader()
-      reader.read().then(function processData ({ done, value }): Promise<void> {
-        if (done) {
-          console.log('Stream completed?')
-          return new Promise(res => res)
-        }
-        if (!value) {
-          console.warn('value is undefined.')
-          return reader.read().then(processData)
-        }
-        try {
-          // await prevPromise
-          const buffer = Module.getNextInputBuffer(value.length)
-          buffer.set(value)
-          // console.debug('calling enqueueData', chunk.length)
-          Module.commitInputData(value.length)
-          // console.debug('enqueData done.')
-        } catch (ex) {
-          if (typeof ex === 'number') {
-            console.error(Module.getExceptionMsg(ex))
-            throw ex
+      let ret = await reader.read()
+      while (!ret.done) {
+        if (ret.value) {
+          try {
+            const buffer = Module.getNextInputBuffer(ret.value.length)
+            buffer.set(ret.value)
+            // console.debug('calling enqueueData', chunk.length)
+            Module.commitInputData(ret.value.length)
+            // console.debug('enqueData done.')
+          } catch (ex) {
+            if (typeof ex === 'number') {
+              console.error(Module.getExceptionMsg(ex))
+              throw ex
+            }
           }
         }
-
-        return reader.read().then(processData)
-      })
+        ret = await reader.read()
+      }
     })
   }
 
