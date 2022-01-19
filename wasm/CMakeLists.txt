@@ -19,8 +19,7 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 8.0.1
 )
-set(PTHREADS ON)
-set(PTHREADS_SEM ON)
+set(SDL_THREADS ON)
 set(BENCHMARK_ENABLE_TESTING OFF)
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128")
@@ -74,7 +73,7 @@ ExternalProject_Add(
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"
   BUILD_COMMAND ${CMAKE_COMMAND} -E env emmake make -j24
   INSTALL_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || make install"
-  PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-wasm.patch
+  # PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-wasm.patch
 )
 
 

@@ -22,7 +22,20 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 }
 
+struct context {
+  SDL_Window *window;
+  SDL_Renderer *renderer;
+  SDL_Texture *texture;
+  SDL_AudioDeviceID dev;
+  SDL_AudioSpec openedAudioSpec;
+  int iteration;
+  // std::chrono::system_clock::time_point fpsCounts[FPS_COUNT];
+};
+
 namespace {
+const size_t WIDTH = 1920;
+const size_t HEIGHT = 1080;
+
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 
 std::uint8_t inputBuffer[MAX_INPUT_BUFFER];
@@ -32,29 +45,17 @@ std::condition_variable waitCv;
 size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 
+// for SDL
+context ctx;
+
 // for libav
-AVFormatContext *formatContext = nullptr;
-AVIOContext *avioContext = nullptr;
-uint8_t *ibuf = nullptr;
-size_t ibufSize = 64 * 1024;
-size_t requireBufSize = 2 * 1024 * 1024;
-
-AVStream *videoStream = nullptr;
-AVStream *audioStream = nullptr;
-
-const AVCodec *videoCodec = nullptr;
-const AVCodec *audioCodec = nullptr;
-
-AVCodecContext *videoCodecContext = nullptr;
-AVCodecContext *audioCodecContext = nullptr;
-
-AVFrame *frame = nullptr;
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
 std::mutex videoFrameMtx, audioFrameMtx;
 bool videoFrameFound = false;
 
 int64_t initPts = -1;
 
+bool reseted = false;
 } // namespace
 
 emscripten::val getNextInputBuffer(size_t nextSize) {
@@ -88,19 +89,6 @@ void showVersionInfo() {
 void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
 void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
 
-const size_t WIDTH = 1920;
-const size_t HEIGHT = 1080;
-
-struct context {
-  SDL_Window *window;
-  SDL_Renderer *renderer;
-  SDL_Texture *texture;
-  SDL_AudioDeviceID dev;
-  SDL_AudioSpec openedAudioSpec;
-  int iteration;
-  // std::chrono::system_clock::time_point fpsCounts[FPS_COUNT];
-};
-
 int read_packet(void *opaque, uint8_t *buf, int bufSize) {
   std::unique_lock<std::mutex> lock(inputBufferMtx);
   waitCv.wait(lock, [&] {
@@ -119,11 +107,51 @@ void commitInputData(size_t nextSize) {
   waitCv.notify_all();
 }
 
-void audioCallback(void *userData, uint8_t *stream, int len) {
-  memset(stream, 0, len);
+void reset() {
+  reseted = true;
+  {
+    std::lock_guard<std::mutex> lock(inputBufferMtx);
+    inputBufferReadIndex = 0;
+    inputBufferWriteIndex = 0;
+  }
+  {
+    std::lock_guard<std::mutex> lock(videoFrameMtx);
+    while (videoFrameQueue.size() > 0) {
+      auto frame = videoFrameQueue.front();
+      videoFrameQueue.pop_front();
+      av_frame_free(&frame);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(audioFrameMtx);
+    while (audioFrameQueue.size() > 0) {
+      auto frame = audioFrameQueue.front();
+      audioFrameQueue.pop_front();
+      av_frame_free(&frame);
+    }
+  }
+  // SDL Audio
+  SDL_ClearQueuedAudio(ctx.dev);
 }
 
-void decoderThread(context *ctx) {
+void decoderThread() {
+  AVFormatContext *formatContext = nullptr;
+  AVIOContext *avioContext = nullptr;
+  uint8_t *ibuf = nullptr;
+  size_t ibufSize = 64 * 1024;
+  size_t requireBufSize = 2 * 1024 * 1024;
+
+  AVStream *videoStream = nullptr;
+  AVStream *audioStream = nullptr;
+
+  const AVCodec *videoCodec = nullptr;
+  const AVCodec *audioCodec = nullptr;
+
+  AVCodecContext *videoCodecContext = nullptr;
+  AVCodecContext *audioCodecContext = nullptr;
+
+  AVFrame *frame = nullptr;
+
   // probe phase
   {
     // probe
@@ -259,7 +287,7 @@ void decoderThread(context *ctx) {
   }
 
   // decode phase
-  while (true) {
+  while (!reseted) {
     // decode frames
     if (frame == nullptr) {
       frame = av_frame_alloc();
@@ -378,10 +406,16 @@ void decoderThread(context *ctx) {
     }
     av_packet_unref(&packet);
   }
+  avcodec_close(videoCodecContext);
+  avcodec_free_context(&videoCodecContext);
+  avcodec_close(audioCodecContext);
+  avcodec_free_context(&audioCodecContext);
+
+  avio_context_free(&avioContext);
+  avformat_free_context(formatContext);
 }
 
 void mainloop(void *arg) {
-  context *ctx = static_cast<context *>(arg);
 
   // mainloop
   // spdlog::info("mainloop! {}", videoFrameQueue.size());
@@ -401,17 +435,16 @@ void mainloop(void *arg) {
     int bufferSize =
         av_image_get_buffer_size((AVPixelFormat)currentFrame->format,
                                  currentFrame->width, currentFrame->height, 1);
-    SDL_LockTexture(ctx->texture, NULL, reinterpret_cast<void **>(&buf),
-                    &pitch);
+    SDL_LockTexture(ctx.texture, NULL, reinterpret_cast<void **>(&buf), &pitch);
     av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
                             currentFrame->linesize,
                             (AVPixelFormat)currentFrame->format,
                             currentFrame->width, currentFrame->height, 1);
-    SDL_UnlockTexture(ctx->texture);
+    SDL_UnlockTexture(ctx.texture);
     av_frame_free(&currentFrame);
 
-    SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
-    SDL_RenderPresent(ctx->renderer);
+    SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
+    SDL_RenderPresent(ctx.renderer);
   }
   while (audioFrameQueue.size() > 0) {
     AVFrame *frame = nullptr;
@@ -421,13 +454,13 @@ void mainloop(void *arg) {
       audioFrameQueue.pop_front();
     }
 
-    auto &spec = ctx->openedAudioSpec;
+    auto &spec = ctx.openedAudioSpec;
 
-    if (ctx->dev == 0 || spec.freq != frame->sample_rate ||
+    if (ctx.dev == 0 || spec.freq != frame->sample_rate ||
         spec.channels != frame->channels) {
-      SDL_PauseAudioDevice(ctx->dev, 1);
-      SDL_ClearQueuedAudio(ctx->dev);
-      SDL_CloseAudioDevice(ctx->dev);
+      SDL_PauseAudioDevice(ctx.dev, 1);
+      SDL_ClearQueuedAudio(ctx.dev);
+      SDL_CloseAudioDevice(ctx.dev);
 
       // オーディオデバイス再オープン
       SDL_AudioSpec want;
@@ -437,14 +470,16 @@ void mainloop(void *arg) {
       want.channels = frame->channels;
       want.samples = 4096;
 
-      ctx->dev = SDL_OpenAudioDevice(NULL, 0, &want, &ctx->openedAudioSpec, 0);
-      spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx->dev, SDL_GetError());
+      SDL_ClearError();
+      spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
+      ctx.dev = SDL_OpenAudioDevice(NULL, 0, &want, &ctx.openedAudioSpec, 0);
+      spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
       spdlog::info("frame freq:{} channels:{}", frame->sample_rate,
                    frame->channels);
       spdlog::info("want: freq:{} format:{} channels:{}", want.freq,
                    want.format, want.channels);
 
-      SDL_PauseAudioDevice(ctx->dev, 0);
+      SDL_PauseAudioDevice(ctx.dev, 0);
     }
 
     if (frame->channels > 1) {
@@ -457,18 +492,18 @@ void mainloop(void *arg) {
         }
       }
       int ret =
-          SDL_QueueAudio(ctx->dev, &buf[0],
+          SDL_QueueAudio(ctx.dev, &buf[0],
                          sizeof(float) * frame->nb_samples * frame->channels);
       if (ret < 0) {
         spdlog::info("SDL_QueueAudio: {}: {}", ret, SDL_GetError());
       }
     } else {
-      int ret = SDL_QueueAudio(ctx->dev, frame->buf[0]->data,
+      int ret = SDL_QueueAudio(ctx.dev, frame->buf[0]->data,
                                sizeof(float) * frame->nb_samples);
       if (ret < 0) {
         spdlog::info("SDL_QueueAudio: dev:{} {}: {} GetQueuedAudioSize:{}",
-                     ctx->dev, ret, SDL_GetError(),
-                     SDL_GetQueuedAudioSize(ctx->dev));
+                     ctx.dev, ret, SDL_GetError(),
+                     SDL_GetQueuedAudioSize(ctx.dev));
       }
     }
     av_frame_free(&frame);
@@ -480,13 +515,19 @@ int main() {
   SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
   spdlog::info("SDL_Init done.");
 
-  context ctx;
   ctx.dev = 0;
 
   ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
                                 SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT,
                                 SDL_WINDOW_SHOWN);
   spdlog::info("SDL_CreateWindow done.");
+
+  // Disable Keyboard handling
+  // https://github.com/emscripten-core/emscripten/issues/3621
+  SDL_EventState(SDL_TEXTINPUT, SDL_DISABLE);
+  SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
+  SDL_EventState(SDL_KEYUP, SDL_DISABLE);
+
   ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
   spdlog::info("SDL_CreateRenderer done.");
   ctx.texture = SDL_CreateTexture(
@@ -499,9 +540,11 @@ int main() {
 
   const int simulate_infinite_loop = 1;
   const int fps = -1;
-  std::thread th([&]() {
-    spdlog::info("I am thread!");
-    decoderThread(&ctx);
+  std::thread th([]() {
+    while (true) {
+      reseted = false;
+      decoderThread();
+    }
   });
   emscripten_set_main_loop_arg(mainloop, &ctx, fps, simulate_infinite_loop);
   spdlog::info("emscripten_set_main_loop_arg done.");
@@ -518,6 +561,7 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("showVersionInfo", &showVersionInfo);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
+  emscripten::function("reset", &reset);
   emscripten::function("setLogLevelDebug", &setLogLevelDebug);
   emscripten::function("setLogLevelInfo", &setLogLevelInfo);
 }
