@@ -173,6 +173,7 @@ const Page: NextPage = () => {
           }
         }}
       >
+        <div>web-ts-player</div>
         <div
           css={css`
             margin: 10px auto;

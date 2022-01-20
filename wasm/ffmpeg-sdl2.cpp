@@ -58,6 +58,21 @@ int64_t initPts = -1;
 bool reseted = false;
 } // namespace
 
+// utility
+std::string getExceptionMsg(intptr_t ptr) {
+  auto e = reinterpret_cast<std::exception *>(ptr);
+  return std::string(e->what());
+}
+
+void showVersionInfo() {
+  printf("version: %s\nconfigure: %s\n", av_version_info(),
+         avutil_configuration());
+}
+
+void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
+void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
+
+// Buffer control
 emscripten::val getNextInputBuffer(size_t nextSize) {
   std::unique_lock<std::mutex> lock(inputBufferMtx);
   waitCv.wait(lock, [&] {
@@ -76,19 +91,6 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
   return retVal;
 }
 
-std::string getExceptionMsg(intptr_t ptr) {
-  auto e = reinterpret_cast<std::exception *>(ptr);
-  return std::string(e->what());
-}
-
-void showVersionInfo() {
-  printf("version: %s\nconfigure: %s\n", av_version_info(),
-         avutil_configuration());
-}
-
-void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
-void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
-
 int read_packet(void *opaque, uint8_t *buf, int bufSize) {
   std::unique_lock<std::mutex> lock(inputBufferMtx);
   waitCv.wait(lock, [&] {
@@ -102,11 +104,11 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
 
 void commitInputData(size_t nextSize) {
   std::lock_guard<std::mutex> lock(inputBufferMtx);
-  // spdlog::info("commit Input Data! size:{}", nextSize);
   inputBufferWriteIndex += nextSize;
   waitCv.notify_all();
 }
 
+// reset
 void reset() {
   reseted = true;
   {
@@ -134,6 +136,7 @@ void reset() {
   SDL_ClearQueuedAudio(ctx.dev);
 }
 
+// decoder
 void decoderThread() {
   AVFormatContext *formatContext = nullptr;
   AVIOContext *avioContext = nullptr;
@@ -334,11 +337,6 @@ void decoderThread() {
             "buf[0]size:{} buf[1].size:{} buf[2].size:{} buffer_size:{}",
             frame->buf[0]->size, frame->buf[1]->size, frame->buf[2]->size,
             bufferSize);
-        // std::vector<uint8_t> buf(bufferSize);
-        // av_image_copy_to_buffer(&buf[0], bufferSize, frame->data,
-        //                         frame->linesize,
-        //                         (AVPixelFormat)frame->format, frame->width,
-        //                         frame->height, 1);
         if (initPts < 0) {
           initPts = frame->pts;
         }
@@ -347,13 +345,6 @@ void decoderThread() {
           videoFrameFound = true;
           videoFrameQueue.push_back(av_frame_clone(frame));
         }
-        // double timestamp =
-        //     (frame->pts - initPts) * av_q2d(videoStream->time_base) *
-        //     1000000;
-        // double duration =
-        //     frame->pkt_duration * av_q2d(videoStream->time_base) * 1000000;
-        // videoCallback(timestamp, duration, frame->width, frame->height,
-        //               emscripten::typed_memory_view(bufferSize, &buf[0]));
       }
     }
     if (packet.stream_index == audioStream->index) {
@@ -370,7 +361,6 @@ void decoderThread() {
                       frame->format, frame->pts, av_q2d(frame->time_base),
                       av_q2d(audioStream->time_base), frame->buf[0]->size,
                       frame->buf[1]->size, frame->nb_samples);
-        // callOnCallback(frame->pts, "audio", frame->data[0], )
         if (initPts < 0) {
           initPts = frame->pts;
         }
@@ -378,30 +368,6 @@ void decoderThread() {
           std::lock_guard<std::mutex> lock(audioFrameMtx);
           audioFrameQueue.push_back(av_frame_clone(frame));
         }
-
-        // Audioはとりあえず何もしない。あとでOpenAL対応する=>SDLでも良さそう
-        // double timestamp =
-        //     (frame->pts - initPts) * av_q2d(audioStream->time_base) *
-        //     1000000;
-        // double duration =
-        //     frame->pkt_duration * av_q2d(audioStream->time_base) * 1000000;
-
-        // int bufSize =
-        //     av_samples_get_buffer_size(&frame->linesize[0],
-        //     frame->channels,
-        //                                frame->nb_samples,
-        //                                (AVSampleFormat)frame->format, 0) /
-        //     sizeof(float);
-        // std::vector<float> buf(bufSize);
-        // for (int i = 0; i < frame->channels; i++) {
-        //   memcpy(&buf[frame->nb_samples * i], frame->buf[i]->data,
-        //          sizeof(float) * frame->nb_samples);
-        // }
-
-        // audioCallback(timestamp, duration, frame->sample_rate,
-        //               frame->nb_samples, frame->channels,
-        //               emscripten::typed_memory_view<float>(bufSize,
-        //               &buf[0]));
       }
     }
     av_packet_unref(&packet);
@@ -511,16 +477,10 @@ void mainloop(void *arg) {
 }
 
 int main() {
-  spdlog::info("main()");
+  spdlog::info("Wasm main() started.");
+
+  // SDL初期化
   SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
-  spdlog::info("SDL_Init done.");
-
-  ctx.dev = 0;
-
-  ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
-                                SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT,
-                                SDL_WINDOW_SHOWN);
-  spdlog::info("SDL_CreateWindow done.");
 
   // Disable Keyboard handling
   // https://github.com/emscripten-core/emscripten/issues/3621
@@ -528,25 +488,33 @@ int main() {
   SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
   SDL_EventState(SDL_KEYUP, SDL_DISABLE);
 
+  ctx.dev = 0;
+
+  ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
+                                SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT,
+                                SDL_WINDOW_SHOWN);
+
   ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
-  spdlog::info("SDL_CreateRenderer done.");
   ctx.texture = SDL_CreateTexture(
       ctx.renderer, SDL_PIXELFORMAT_IYUV,
       SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, 1440, HEIGHT);
-  spdlog::info("SDL_CreateTexture done.");
   ctx.iteration = 0;
 
   auto now = std::chrono::system_clock::now();
 
-  const int simulate_infinite_loop = 1;
-  // fps指定するとrAFループじゃなくタイマーになるので裏周りしても再生が続く。fps<=0だとrAFが使われるらしい。
-  const int fps = 60;
+  // デコーダスレッド起動
+  spdlog::info("Starting decoder thread.");
   std::thread th([]() {
     while (true) {
       reseted = false;
       decoderThread();
     }
   });
+
+  // fps指定するとrAFループじゃなくタイマーになるので裏周りしても再生が続く。fps<=0だとrAFが使われるらしい。
+  const int fps = 60;
+  const int simulate_infinite_loop = 1;
+  spdlog::info("Starting main loop.");
   emscripten_set_main_loop_arg(mainloop, NULL, fps, simulate_infinite_loop);
 
   // SDL_DestroyRenderer(ctx.renderer);
