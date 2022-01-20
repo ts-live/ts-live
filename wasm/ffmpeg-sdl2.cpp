@@ -15,10 +15,14 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
 }
 
@@ -154,6 +158,7 @@ void decoderThread() {
   AVCodecContext *audioCodecContext = nullptr;
 
   AVFrame *frame = nullptr;
+  AVFrame *filteredFrame = nullptr;
 
   // probe phase
   {
@@ -295,11 +300,93 @@ void decoderThread() {
     }
   }
 
+  // FilterGraph作成
+  const AVFilter *bufferSource = avfilter_get_by_name("buffer");
+  const AVFilter *bufferSink = avfilter_get_by_name("buffersink");
+  AVFilterInOut *inputs = avfilter_inout_alloc();
+  AVFilterInOut *outputs = avfilter_inout_alloc();
+  AVFilterGraph *filterGraph = avfilter_graph_alloc();
+  AVFilterContext *bufferSinkContext;
+  AVFilterContext *bufferSourceContext;
+  int ret;
+
+  if (!outputs || !inputs || !filterGraph) {
+    spdlog::error("Can't allocate avfilter in/out/filterGraph");
+    return;
+  }
+
+  std::string bufferSourceArgs = fmt::format(
+      "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
+      videoCodecContext->width, videoCodecContext->height,
+      videoCodecContext->pix_fmt, videoStream->time_base.num,
+      videoStream->time_base.den, videoCodecContext->sample_aspect_ratio.num,
+      videoCodecContext->sample_aspect_ratio.den);
+
+  // Buffer video source
+  ret =
+      avfilter_graph_create_filter(&bufferSourceContext, bufferSource, "in",
+                                   bufferSourceArgs.c_str(), NULL, filterGraph);
+  if (ret < 0) {
+    spdlog::error("Can't create buffer source");
+    return;
+  }
+
+  ret = avfilter_graph_create_filter(&bufferSinkContext, bufferSink, "out",
+                                     NULL, NULL, filterGraph);
+  if (ret < 0) {
+    spdlog::error("Can't create buffer sink");
+    return;
+  }
+
+  enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
+
+  ret = av_opt_set_int_list(bufferSinkContext, "pix_fmts", pix_fmts,
+                            AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
+  if (ret < 0) {
+    spdlog::error("Can't set opt buffer sink");
+    return;
+  }
+
+  outputs->name = av_strdup("in");
+  outputs->filter_ctx = bufferSourceContext;
+  outputs->pad_idx = 0;
+  outputs->next = NULL;
+
+  inputs->name = av_strdup("out");
+  inputs->filter_ctx = bufferSinkContext;
+  inputs->pad_idx = 0;
+  inputs->next = NULL;
+
+  std::string filtersDescription = fmt::format("yadif");
+  // std::string filtersDescription = fmt::format("vflip");
+  // std::string filtersDescription = fmt::format("bwdif");
+  ret = avfilter_graph_parse_ptr(filterGraph, filtersDescription.c_str(),
+                                 &inputs, &outputs, NULL);
+  if (ret < 0) {
+    spdlog::error("Can't parse filter Description");
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+    return;
+  }
+
+  ret = avfilter_graph_config(filterGraph, NULL);
+  if (ret < 0) {
+    spdlog::error("Can't configure filter Description");
+    avfilter_inout_free(&inputs);
+    avfilter_inout_free(&outputs);
+    return;
+  }
+  avfilter_inout_free(&inputs);
+  avfilter_inout_free(&outputs);
+
   // decode phase
   while (!reseted) {
     // decode frames
     if (frame == nullptr) {
       frame = av_frame_alloc();
+    }
+    if (filteredFrame == nullptr) {
+      filteredFrame = av_frame_alloc();
     }
     AVPacket packet = AVPacket();
     int videoCount = 0;
@@ -347,10 +434,32 @@ void decoderThread() {
           initPts = frame->pts;
         }
         frame->time_base = videoStream->time_base;
-        {
-          std::lock_guard<std::mutex> lock(videoFrameMtx);
-          videoFrameFound = true;
-          videoFrameQueue.push_back(av_frame_clone(frame));
+
+        // Filterに突っ込む前にPTSを保存する
+        auto pts = frame->pts;
+        // Filterに突っ込む
+        int ret = av_buffersrc_add_frame(bufferSourceContext, frame);
+        if (ret < 0) {
+          spdlog::error("av_buffersrc_add_frame_flags error: {}",
+                        av_err2str(ret));
+        }
+
+        while (true) {
+          int ret = av_buffersink_get_frame(bufferSinkContext, filteredFrame);
+          if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+            break;
+          }
+          if (ret < 0) {
+            spdlog::error("av_buffersink_get_frame error: {}", av_err2str(ret));
+          }
+          // PTSを復元
+          filteredFrame->pts = pts;
+          {
+            std::lock_guard<std::mutex> lock(videoFrameMtx);
+            videoFrameFound = true;
+            videoFrameQueue.push_back(av_frame_clone(filteredFrame));
+            av_frame_free(&filteredFrame);
+          }
         }
       }
     }
@@ -387,6 +496,8 @@ void decoderThread() {
 
   avio_context_free(&avioContext);
   avformat_free_context(formatContext);
+
+  avfilter_graph_free(&filterGraph);
 }
 
 void mainloop(void *arg) {
