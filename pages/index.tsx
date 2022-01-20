@@ -10,6 +10,8 @@ import { Box, Drawer, MenuItem, Select, Stack, TextField } from '@mui/material'
 
 declare interface WasmModule {
   getExceptionMsg(ex: number): string
+  setLogLevelDebug(): void
+  setLogLevelInfo(): void
   showVersionInfo(): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -150,9 +152,9 @@ const Page: NextPage = () => {
         console.log('setupModule!');
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
-              doNotCaptureKeyboard: true
+              doNotCaptureKeyboard: true,
+              onRuntimeInitialized: function(){Module.setLogLevelInfo();}
             };
-            console.log(Module);
         `}
       </Script>
       <Script
