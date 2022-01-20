@@ -539,15 +539,15 @@ int main() {
   auto now = std::chrono::system_clock::now();
 
   const int simulate_infinite_loop = 1;
-  const int fps = -1;
+  // fps指定するとrAFループじゃなくタイマーになるので裏周りしても再生が続く。fps<=0だとrAFが使われるらしい。
+  const int fps = 60;
   std::thread th([]() {
     while (true) {
       reseted = false;
       decoderThread();
     }
   });
-  emscripten_set_main_loop_arg(mainloop, &ctx, fps, simulate_infinite_loop);
-  spdlog::info("emscripten_set_main_loop_arg done.");
+  emscripten_set_main_loop_arg(mainloop, NULL, fps, simulate_infinite_loop);
 
   // SDL_DestroyRenderer(ctx.renderer);
   // SDL_DestroyWindow(ctx.window);
