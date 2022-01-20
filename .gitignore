@@ -37,4 +37,3 @@ yarn-error.log*
 *.tsbuildinfo
 build/
 public/data/
-public/wasm/
