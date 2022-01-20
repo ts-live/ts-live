@@ -16,6 +16,10 @@ module.exports = {
           {
             key: 'Access-Control-Allow-Origin',
             value: '*'
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "default-src http: 'unsafe-eval' 'unsafe-inline'"
           }
         ]
       }
