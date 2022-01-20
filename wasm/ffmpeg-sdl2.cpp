@@ -146,6 +146,7 @@ void decoderThread() {
 
   AVStream *videoStream = nullptr;
   AVStream *audioStream = nullptr;
+  AVStream *captionStream = nullptr;
 
   const AVCodec *videoCodec = nullptr;
   const AVCodec *audioCodec = nullptr;
@@ -208,6 +209,11 @@ void decoderThread() {
             audioStream == nullptr) {
           audioStream = formatContext->streams[i];
         }
+        if (formatContext->streams[i]->codecpar->codec_type ==
+                AVMEDIA_TYPE_SUBTITLE &&
+            captionStream == nullptr) {
+          captionStream = formatContext->streams[i];
+        }
       }
       if (videoStream == nullptr) {
         spdlog::error("No video stream ...");
@@ -232,7 +238,7 @@ void decoderThread() {
     if (videoCodec == nullptr) {
       videoCodec = avcodec_find_decoder(videoStream->codecpar->codec_id);
       if (videoCodec == nullptr) {
-        spdlog::error("No supported decoder ...");
+        spdlog::error("No supported decoder for Video ...");
         return;
       } else {
         spdlog::debug("Video Decoder created.");
@@ -241,7 +247,7 @@ void decoderThread() {
     if (audioCodec == nullptr) {
       audioCodec = avcodec_find_decoder(audioStream->codecpar->codec_id);
       if (audioCodec == nullptr) {
-        spdlog::error("No supported decoder ...");
+        spdlog::error("No supported decoder for Audio ...");
         return;
       } else {
         spdlog::debug("Audio Decoder created.");
@@ -377,6 +383,17 @@ void decoderThread() {
           audioFrameQueue.push_back(av_frame_clone(frame));
         }
       }
+    }
+    if (packet.stream_index == captionStream->index) {
+      char buffer[packet.size + 2];
+      memcpy(buffer, packet.data, packet.size);
+      buffer[packet.size + 1] = '\0';
+      std::string str = fmt::format("{:02X}", packet.data[0]);
+      for (int i = 1; i < packet.size; i++) {
+        str += fmt::format(" {:02x}", packet.data[i]);
+      }
+      spdlog::debug("CaptionPacket received. size: {} data: [{}]", packet.size,
+                    str);
     }
     av_packet_unref(&packet);
   }
