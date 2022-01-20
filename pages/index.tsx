@@ -183,7 +183,6 @@ const Page: NextPage = () => {
             label='mirakurun server'
             placeholder='http://mirakurun:40772'
             onChange={ev => {
-              console.log(ev)
               setMirakurunServer(ev.target.value)
             }}
             value={mirakurunServer}
