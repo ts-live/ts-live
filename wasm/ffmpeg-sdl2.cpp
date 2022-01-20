@@ -188,10 +188,16 @@ void decoderThread() {
 
       // find video stream
       for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
-        spdlog::debug("stream[{}]: codec_type:{} dim:{}x{}", i,
-                      formatContext->streams[i]->codecpar->codec_type,
-                      formatContext->streams[i]->codecpar->width,
-                      formatContext->streams[i]->codecpar->height);
+        spdlog::debug(
+            "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
+            "dim:{}x{}",
+            i, formatContext->streams[i]->codecpar->codec_type,
+            formatContext->streams[i]->codecpar->codec_tag,
+            avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
+            formatContext->streams[i]->codecpar->video_delay,
+            formatContext->streams[i]->codecpar->width,
+            formatContext->streams[i]->codecpar->height);
+
         if (formatContext->streams[i]->codecpar->codec_type ==
                 AVMEDIA_TYPE_VIDEO &&
             videoStream == nullptr) {
