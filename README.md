@@ -1,34 +1,29 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# web-ts-player
 
-## Getting Started
+ブラウザで mirakurun の MPEGTS ストリームを直接再生する実験的 Web アプリ
 
-First, run the development server:
+## LICENSE
 
-```bash
-npm run dev
-# or
-yarn dev
+MIT-License（内部で利用している ffmpeg は LGPL です）
+
+## run
+
+```
+$ yarn
+$ yarn dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+起動するポートはメッセージを参照
 
-You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
+## 操作方法
 
-[API routes](https://nextjs.org/docs/api-routes/introduction) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.ts`.
+なんかそれっぽいところに mirakurun のサーバの URL（http://mirakurun:40772 みたいに）を入れると自動的にサービス一覧を取得するので選ぶだけ。
 
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/api-routes/introduction) instead of React pages.
+もしも暴走したっぽいときはタブを閉じて別タブで URL 入れ直すのが良いです（WebAssembly が暴れてるときの一般的対処）。
 
-## Learn More
+## 制限事項
 
-To learn more about Next.js, take a look at the following resources:
+- WebAssembly thread を使う（=SharedArrayBuffer を使う）関係で Secure Context 必須
+- mixed content の関係で mirakurun サーバと http/https 混在は出来ない
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+上記 2 制約から、「http://localhostでアクセスしてmirakurunにhttp接続」または「httpsサーバに接続してmirakurunにもhttps接続」のどちらかでないと動きません。
