@@ -32,6 +32,8 @@ struct context {
   SDL_Texture *texture;
   SDL_AudioDeviceID dev;
   SDL_AudioSpec openedAudioSpec;
+  size_t textureWidth;
+  size_t textureHeight;
   int iteration;
   // std::chrono::system_clock::time_point fpsCounts[FPS_COUNT];
 };
@@ -515,6 +517,18 @@ void mainloop(void *arg) {
                   currentFrame->pts, av_q2d(currentFrame->time_base),
                   audioFrameQueue.size());
 
+    // Textureとサイズ合わせ
+    if (currentFrame->width != ctx.textureWidth ||
+        currentFrame->height != ctx.textureHeight) {
+      SDL_DestroyTexture(ctx.texture);
+      ctx.texture =
+          SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
+                            SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
+                            currentFrame->width, currentFrame->height);
+      ctx.textureWidth = currentFrame->width;
+      ctx.textureHeight = currentFrame->height;
+    }
+
     // AudioFrameは完全に見るだけ
     AVFrame *audioFrame = audioFrameQueue.front();
 
@@ -543,7 +557,7 @@ void mainloop(void *arg) {
                   videoPtsTime, audioPtsTime, SDL_GetQueuedAudioSize(ctx.dev),
                   ctx.openedAudioSpec.freq, estimatedAudioPlayTime, showFlag);
 
-    // リップシンク条件を後で入れる
+    // リップシンク条件を満たしてたらVideoFrame再生
     if (showFlag) {
       {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
@@ -656,8 +670,10 @@ int main() {
   ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
   ctx.texture = SDL_CreateTexture(
       ctx.renderer, SDL_PIXELFORMAT_IYUV,
-      SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, 1440, HEIGHT);
+      SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
   ctx.iteration = 0;
+  ctx.textureWidth = WIDTH;
+  ctx.textureHeight = HEIGHT;
 
   auto now = std::chrono::system_clock::now();
 
