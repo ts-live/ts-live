@@ -340,6 +340,7 @@ void decoderThread() {
         if (initPts < 0) {
           initPts = frame->pts;
         }
+        frame->time_base = videoStream->time_base;
         {
           std::lock_guard<std::mutex> lock(videoFrameMtx);
           videoFrameFound = true;
@@ -364,6 +365,7 @@ void decoderThread() {
         if (initPts < 0) {
           initPts = frame->pts;
         }
+        frame->time_base = audioStream->time_base;
         if (videoFrameFound) {
           std::lock_guard<std::mutex> lock(audioFrameMtx);
           audioFrameQueue.push_back(av_frame_clone(frame));
@@ -385,40 +387,80 @@ void mainloop(void *arg) {
 
   // mainloop
   // spdlog::info("mainloop! {}", videoFrameQueue.size());
-  if (videoFrameQueue.size() > 0) {
+  if (videoFrameQueue.size() > 0 && audioFrameQueue.size() > 0) {
     // std::lock_guard<std::mutex> lock(videoFrameMtx);
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
-    uint8_t *buf;
-    int pitch;
-    AVFrame *currentFrame = nullptr;
-    {
-      std::lock_guard<std::mutex> lock(videoFrameMtx);
-      currentFrame = videoFrameQueue.front();
-      videoFrameQueue.pop_front();
-    }
-    int bufferSize =
-        av_image_get_buffer_size((AVPixelFormat)currentFrame->format,
-                                 currentFrame->width, currentFrame->height, 1);
-    SDL_LockTexture(ctx.texture, NULL, reinterpret_cast<void **>(&buf), &pitch);
-    av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
-                            currentFrame->linesize,
-                            (AVPixelFormat)currentFrame->format,
-                            currentFrame->width, currentFrame->height, 1);
-    SDL_UnlockTexture(ctx.texture);
-    av_frame_free(&currentFrame);
+    // 次のVideoFrameをまずは見る（popはまだしない）
+    AVFrame *currentFrame = videoFrameQueue.front();
+    spdlog::debug("VideoFrame@mainloop pts:{} time_base:{} AudioQueueSize:{}",
+                  currentFrame->pts, av_q2d(currentFrame->time_base),
+                  audioFrameQueue.size());
 
-    SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
-    SDL_RenderPresent(ctx.renderer);
+    // AudioFrameは完全に見るだけ
+    AVFrame *audioFrame = audioFrameQueue.front();
+
+    // VideoとAudioのPTSをクロックから時間に直す
+    // TODO: クロック一回転したときの処理
+    double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
+    double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
+
+    // SDL_GetQueuedAudioSize:
+    // AudioQueueに溜まってる分（バイト数なので型サイズとチャンネル数で割る）
+    // ctx.openedAudioSpec.samples: SDLの中のバッファサイズ
+    // 本当は更に+でデバイスのバッファサイズがあるはず
+    double queuedSize = static_cast<double>(SDL_GetQueuedAudioSize(ctx.dev)) /
+                            (sizeof(float) * ctx.openedAudioSpec.channels) +
+                        ctx.openedAudioSpec.samples;
+
+    // 上記から推定される、現在再生している音声のPTS（時間）
+    double estimatedAudioPlayTime =
+        audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+
+    // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
+    bool showFlag = estimatedAudioPlayTime > videoPtsTime;
+
+    spdlog::debug("Time@mainloop VideoPTSTime: {} AudioPTSTime: {} "
+                  "QueuedAudioSize: {} freq: {} EstimatedTime: {} showFlag: {}",
+                  videoPtsTime, audioPtsTime, SDL_GetQueuedAudioSize(ctx.dev),
+                  ctx.openedAudioSpec.freq, estimatedAudioPlayTime, showFlag);
+
+    // リップシンク条件を後で入れる
+    if (showFlag) {
+      {
+        std::lock_guard<std::mutex> lock(videoFrameMtx);
+        videoFrameQueue.pop_front();
+      }
+      int bufferSize = av_image_get_buffer_size(
+          (AVPixelFormat)currentFrame->format, currentFrame->width,
+          currentFrame->height, 1);
+      uint8_t *buf;
+      int pitch;
+      SDL_LockTexture(ctx.texture, NULL, reinterpret_cast<void **>(&buf),
+                      &pitch);
+      av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
+                              currentFrame->linesize,
+                              (AVPixelFormat)currentFrame->format,
+                              currentFrame->width, currentFrame->height, 1);
+      SDL_UnlockTexture(ctx.texture);
+      av_frame_free(&currentFrame);
+
+      SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
+      SDL_RenderPresent(ctx.renderer);
+    }
   }
-  while (audioFrameQueue.size() > 0) {
+
+  // AudioFrameはVideoFrame処理でのPTS参照用に1個だけキューに残す
+  while (audioFrameQueue.size() > 1) {
     AVFrame *frame = nullptr;
     {
       std::lock_guard<std::mutex> lock(audioFrameMtx);
       frame = audioFrameQueue.front();
       audioFrameQueue.pop_front();
     }
+    spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{}",
+                  frame->pts, av_q2d(frame->time_base), frame->nb_samples);
 
     auto &spec = ctx.openedAudioSpec;
 
