@@ -392,25 +392,34 @@ void mainloop(void *arg) {
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
+    // 次のVideoFrameをまずは見る（popはまだしない）
     AVFrame *currentFrame = videoFrameQueue.front();
     spdlog::debug("VideoFrame@mainloop pts:{} time_base:{} AudioQueueSize:{}",
                   currentFrame->pts, av_q2d(currentFrame->time_base),
                   audioFrameQueue.size());
+
+    // AudioFrameは完全に見るだけ
     AVFrame *audioFrame = audioFrameQueue.front();
+
+    // VideoとAudioのPTSをクロックから時間に直す
+    // TODO: クロック一回転したときの処理
     double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
     double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
 
-    // SDL_GetQueuedAudioSize: AudioQueueに溜まってる分
+    // SDL_GetQueuedAudioSize:
+    // AudioQueueに溜まってる分（バイト数なので型サイズとチャンネル数で割る）
     // ctx.openedAudioSpec.samples: SDLの中のバッファサイズ
     // 本当は更に+でデバイスのバッファサイズがあるはず
     double queuedSize = static_cast<double>(SDL_GetQueuedAudioSize(ctx.dev)) /
                             (sizeof(float) * ctx.openedAudioSpec.channels) +
                         ctx.openedAudioSpec.samples;
+
+    // 上記から推定される、現在再生している音声のPTS（時間）
     double estimatedAudioPlayTime =
         audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
 
-    // 0.033: 1フレーム
-    bool showFlag = estimatedAudioPlayTime > videoPtsTime - 0.033;
+    // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
+    bool showFlag = estimatedAudioPlayTime > videoPtsTime;
 
     spdlog::debug("Time@mainloop VideoPTSTime: {} AudioPTSTime: {} "
                   "QueuedAudioSize: {} freq: {} EstimatedTime: {} showFlag: {}",
