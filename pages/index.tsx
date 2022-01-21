@@ -184,7 +184,7 @@ const Page: NextPage = () => {
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
               doNotCaptureKeyboard: true,
-              onRuntimeInitialized: function(){Module.setLogLevelInfo();}
+              onRuntimeInitialized: function(){Module.setLogLevelDebug();}
             };
         `}
       </Script>

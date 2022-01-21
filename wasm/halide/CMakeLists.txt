@@ -23,10 +23,10 @@ add_executable(dif_gen dif.cpp)
 target_link_libraries(dif_gen PRIVATE Halide::Generator)
 
 set(HALIDE_TARGET_WASM "wasm-32-wasmrt-wasm_bulk_memory-wasm_simd128-wasm_sat_float_to_int-wasm_signext")
-add_halide_library(deinterlace.wasm FROM dif_gen_gen GENERATOR deinterlace TARGETS ${HALIDE_TARGET} AUTOSCHEDULER Halide::Adams2019 PARAMS auto_schedule=true)
+add_halide_library(deinterlace.wasm FROM dif_gen GENERATOR deinterlace TARGETS ${HALIDE_TARGET} AUTOSCHEDULER Halide::Adams2019 PARAMS auto_schedule=true)
 
 
 export(
   TARGETS
-  deinterlace.wasm deinterlace.wasm.runtime
+  deinterlace.wasm deinterlace.wasm.runtime Halide_Runtime
   FILE host_tools.cmake)

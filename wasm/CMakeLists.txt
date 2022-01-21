@@ -4,6 +4,7 @@ project(ts-wasm LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 17)
 #add_compile_options(-matomics -mbulk-memory -std=c++17)
 
+find_package(Threads)
 include(FetchContent)
 FetchContent_Declare(
   SDL2
