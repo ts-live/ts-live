@@ -62,6 +62,8 @@ bool videoFrameFound = false;
 int64_t initPts = -1;
 
 bool reseted = false;
+
+bool doDeinterlace = false;
 } // namespace
 
 // utility
@@ -77,6 +79,9 @@ void showVersionInfo() {
 
 void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
 void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
+
+// Interlace Setting
+void setDeinterlace(bool deinterlace) { doDeinterlace = deinterlace; }
 
 // Buffer control
 emscripten::val getNextInputBuffer(size_t nextSize) {
@@ -437,31 +442,38 @@ void decoderThread() {
         }
         frame->time_base = videoStream->time_base;
 
-        // Filterに突っ込む前にPTSを保存する
-        auto pts = frame->pts;
-        // Filterに突っ込む
-        int ret = av_buffersrc_add_frame(bufferSourceContext, frame);
-        if (ret < 0) {
-          spdlog::error("av_buffersrc_add_frame_flags error: {}",
-                        av_err2str(ret));
-        }
-
-        while (true) {
-          int ret = av_buffersink_get_frame(bufferSinkContext, filteredFrame);
-          if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-            break;
-          }
+        if (doDeinterlace) {
+          // Filterに突っ込む前にPTSを保存する
+          auto pts = frame->pts;
+          // Filterに突っ込む
+          int ret = av_buffersrc_add_frame(bufferSourceContext, frame);
           if (ret < 0) {
-            spdlog::error("av_buffersink_get_frame error: {}", av_err2str(ret));
+            spdlog::error("av_buffersrc_add_frame_flags error: {}",
+                          av_err2str(ret));
           }
-          // PTSを復元
-          filteredFrame->pts = pts;
-          {
-            std::lock_guard<std::mutex> lock(videoFrameMtx);
-            videoFrameFound = true;
-            videoFrameQueue.push_back(av_frame_clone(filteredFrame));
-            av_frame_free(&filteredFrame);
+
+          while (true) {
+            int ret = av_buffersink_get_frame(bufferSinkContext, filteredFrame);
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
+              break;
+            }
+            if (ret < 0) {
+              spdlog::error("av_buffersink_get_frame error: {}",
+                            av_err2str(ret));
+            }
+            // PTSを復元
+            filteredFrame->pts = pts;
+            {
+              std::lock_guard<std::mutex> lock(videoFrameMtx);
+              videoFrameFound = true;
+              videoFrameQueue.push_back(av_frame_clone(filteredFrame));
+              av_frame_free(&filteredFrame);
+            }
           }
+        } else {
+          std::lock_guard<std::mutex> lock(videoFrameMtx);
+          videoFrameFound = true;
+          videoFrameQueue.push_back(av_frame_clone(frame));
         }
       }
     }
@@ -702,6 +714,7 @@ int main() {
 EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("getExceptionMsg", &getExceptionMsg);
   emscripten::function("showVersionInfo", &showVersionInfo);
+  emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
   emscripten::function("reset", &reset);
