@@ -27,7 +27,7 @@ FetchContent_MakeAvailable(fmt spdlog)
 FetchContent_GetProperties(SDL2)
 if(NOT SDL2_POPULATED)
   FetchContent_Populate(SDL2)
-  add_subdirectory(${SDL2_SOURCE_DIR} ${SDL2_BINARY_DIR} EXCLUDE_FROM_ALL)
+  add_subdirectory(${sdl2_SOURCE_DIR} ${sdl2_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 set(FFMPEG_CONFIGURE_COMMAND_LIST
