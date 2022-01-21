@@ -30,6 +30,28 @@ if(NOT SDL2_POPULATED)
   add_subdirectory(${SDL2_SOURCE_DIR} ${SDL2_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
+
+set(halide_lib_list deinterlace.wasm)
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
+file(TO_NATIVE_PATH ${CMAKE_COMMAND} native_cmake_command)
+file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/halide native_cmake_current_source_dir)
+execute_process(
+    COMMAND "sh" "-c" "CC= CXX= CMAKE_CROSSCOMPILING= ${native_cmake_command} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} ${native_cmake_current_source_dir}"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools
+)
+
+add_custom_target(generator
+    COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG>
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools
+)
+include(${CMAKE_CURRENT_BINARY_DIR}/host_tools/host_tools.cmake)
+
+foreach(tgt IN ITEMS ${halide_lib_list})
+    add_dependencies(${tgt} generator)
+endforeach()
+
+
 set(FFMPEG_CONFIGURE_COMMAND_LIST
   emconfigure ./configure
     --prefix=${CMAKE_CURRENT_BINARY_DIR}/install
@@ -98,7 +120,7 @@ add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
 target_compile_features(ffmpeg-sdl2 PRIVATE cxx_std_20)
 target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include)
-target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
+target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} deinterlace.wasm deinterlace.wasm.runtime)
 target_link_options(ffmpeg-sdl2 PRIVATE
   "-Wno-pthreads-mem-growth"
   "SHELL:-s ALLOW_MEMORY_GROWTH=1"
