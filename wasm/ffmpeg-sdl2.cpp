@@ -56,7 +56,8 @@ context ctx;
 
 // for libav
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
-std::mutex videoFrameMtx, audioFrameMtx;
+std::deque<std::vector<uint8_t>> captionDataQueue;
+std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
 
 int64_t initPts = -1;
@@ -64,6 +65,8 @@ int64_t initPts = -1;
 bool reseted = false;
 
 bool doDeinterlace = false;
+
+emscripten::val captionCallback = emscripten::val::null();
 } // namespace
 
 // utility
@@ -82,6 +85,11 @@ void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
 
 // Interlace Setting
 void setDeinterlace(bool deinterlace) { doDeinterlace = deinterlace; }
+
+// Callback register
+void setCaptionCallback(emscripten::val callback) {
+  captionCallback = callback;
+}
 
 // Buffer control
 emscripten::val getNextInputBuffer(size_t nextSize) {
@@ -517,6 +525,14 @@ void decoderThread() {
       }
       spdlog::debug("CaptionPacket received. size: {} data: [{}]", packet.size,
                     str);
+      if (!captionCallback.isNull()) {
+        std::vector<uint8_t> buffer(packet.size);
+        memcpy(&buffer[0], packet.data, packet.size);
+        {
+          std::lock_guard<std::mutex> lock(captionDataMtx);
+          captionDataQueue.push_back(std::move(buffer));
+        }
+      }
     }
     av_packet_unref(&packet);
   }
@@ -676,6 +692,18 @@ void mainloop(void *arg) {
     }
     av_frame_free(&frame);
   }
+  if (!captionCallback.isNull()) {
+    while (captionDataQueue.size() > 0) {
+      auto buffer = captionDataQueue.front();
+      {
+        std::lock_guard<std::mutex> lock(captionDataMtx);
+        captionDataQueue.pop_front();
+      }
+      auto data = emscripten::val(
+          emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
+      captionCallback(data);
+    }
+  }
 }
 
 int main() {
@@ -731,6 +759,7 @@ int main() {
 EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("getExceptionMsg", &getExceptionMsg);
   emscripten::function("showVersionInfo", &showVersionInfo);
+  emscripten::function("setCaptionCallback", &setCaptionCallback);
   emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);

@@ -20,6 +20,7 @@ declare interface WasmModule extends EmscriptenModule {
   setLogLevelDebug(): void
   setLogLevelInfo(): void
   showVersionInfo(): void
+  setCaptionCallback(callback: (captionData: Uint8Array) => void): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -123,6 +124,10 @@ const Page: NextPage = () => {
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
 
+    // ARIB字幕パケットそのものを受け取るコールバック
+    Module.setCaptionCallback(captionData => {
+      // console.log('Caption Callback', captionData)
+    })
     Module.setDeinterlace(doDeinterlace || false)
 
     // 再生スタート
