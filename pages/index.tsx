@@ -1,18 +1,26 @@
 /** @jsxImportSource @emotion/react */
 import { css } from '@emotion/react'
 import { NextPage } from 'next'
-import Head from 'next/head'
-import Image from 'next/image'
 import Script from 'next/script'
-import React, { useEffect, useState } from 'react'
-import { useAsync, useLocalStorage } from 'react-use'
-import { Box, Drawer, MenuItem, Select, Stack, TextField } from '@mui/material'
+import { useCallback, useEffect, useState } from 'react'
+import { useLocalStorage } from 'react-use'
+import {
+  Box,
+  Checkbox,
+  Drawer,
+  FormControlLabel,
+  FormGroup,
+  MenuItem,
+  Select,
+  TextField
+} from '@mui/material'
 
-declare interface WasmModule {
+declare interface WasmModule extends EmscriptenModule {
   getExceptionMsg(ex: number): string
   setLogLevelDebug(): void
   setLogLevelInfo(): void
   showVersionInfo(): void
+  setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
   reset(): void
@@ -41,6 +49,10 @@ const Page: NextPage = () => {
     'mirakurunActiveService',
     undefined
   )
+  const [doDeinterlace, setDoDeinterlace] = useLocalStorage<boolean>(
+    'tsplayerDoDeinterlace',
+    false
+  )
   const [stopFunc, setStopFunc] = useState(() => () => {})
 
   useEffect(() => {
@@ -66,21 +78,39 @@ const Page: NextPage = () => {
     fetch(`${mirakurunServer}/api/services`).then(response => {
       if (response.ok && response.body !== null) {
         response.json().then((retval: Array<any>) => {
+          const registeredIdMap: { [key: string]: boolean } = {}
           setTvServices(
-            retval.map(v => {
-              return {
-                id: v.id,
-                serviceId: v.serviceId,
-                networkId: v.networkId,
-                name: v.name,
-                hasLogoData: v.hasLogoData
-              }
-            })
+            retval
+              .map(v => {
+                if (v.id in registeredIdMap) {
+                  return null
+                } else {
+                  registeredIdMap[v.id as string] = true
+                  return {
+                    id: v.id,
+                    serviceId: v.serviceId,
+                    networkId: v.networkId,
+                    name: v.name,
+                    hasLogoData: v.hasLogoData
+                  }
+                }
+              })
+              .filter(v => v) as Array<TvService>
           )
         })
       }
     })
   }, [mirakurunOk, mirakurunServer])
+
+  useEffect(() => {
+    if (doDeinterlace === undefined) {
+      setDoDeinterlace(false)
+      return
+    }
+    if ((window as any).Module !== undefined) {
+      Module.setDeinterlace(doDeinterlace)
+    }
+  }, [doDeinterlace])
 
   useEffect(() => {
     if (!touched) {
@@ -92,6 +122,8 @@ const Page: NextPage = () => {
     }
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
+
+    Module.setDeinterlace(doDeinterlace || false)
 
     // 再生スタート
     const ac = new AbortController()
@@ -135,7 +167,7 @@ const Page: NextPage = () => {
       })
   }, [touched, mirakurunOk, mirakurunServer, activeService])
 
-  const getServicesOptions = () => {
+  const getServicesOptions = useCallback(() => {
     return tvServices.map((service, idx) => {
       return (
         <MenuItem key={service.id} value={service.id}>
@@ -143,13 +175,12 @@ const Page: NextPage = () => {
         </MenuItem>
       )
     })
-  }
+  }, [tvServices])
 
   return (
     <Box>
       <Script id='setupModule' strategy='lazyOnload'>
         {`
-        console.log('setupModule!');
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
               doNotCaptureKeyboard: true,
@@ -222,6 +253,19 @@ const Page: NextPage = () => {
           </Select>
         </div>
         <div>{activeService}</div>
+        <div>
+          <FormGroup>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={doDeinterlace}
+                  onChange={ev => setDoDeinterlace(ev.target.checked)}
+                ></Checkbox>
+              }
+              label='インターレース解除'
+            ></FormControlLabel>
+          </FormGroup>
+        </div>
       </Drawer>
 
       <canvas

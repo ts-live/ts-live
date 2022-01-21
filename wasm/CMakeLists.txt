@@ -65,6 +65,9 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-protocols
     --disable-devices
     --disable-filters
+    --enable-filter=yadif
+    --enable-filter=vflip
+    --enable-filter=bwdif
 )
 list(JOIN FFMPEG_CONFIGURE_COMMAND_LIST " " FFMPEG_CONFIGURE_COMMAND)
 
@@ -86,6 +89,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavcodec.a
   ${CMAKE_BINARY_DIR}/install/lib/libavformat.a
   ${CMAKE_BINARY_DIR}/install/lib/libavutil.a
+  ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
 add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp)
