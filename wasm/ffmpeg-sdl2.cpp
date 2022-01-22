@@ -231,6 +231,8 @@ void decoderThread() {
         }
         if (formatContext->streams[i]->codecpar->codec_type ==
                 AVMEDIA_TYPE_SUBTITLE &&
+            formatContext->streams[i]->codecpar->codec_id ==
+                AV_CODEC_ID_ARIB_CAPTION &&
             captionStream == nullptr) {
           captionStream = formatContext->streams[i];
         }
