@@ -8,8 +8,10 @@ import {
   Box,
   Checkbox,
   Drawer,
+  FormControl,
   FormControlLabel,
   FormGroup,
+  InputLabel,
   MenuItem,
   Select,
   TextField
@@ -183,7 +185,13 @@ const Page: NextPage = () => {
   }, [tvServices])
 
   return (
-    <Box>
+    <Box css={css`
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #1E1E1E;
+    `}>
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
@@ -199,9 +207,6 @@ const Page: NextPage = () => {
         src='/wasm/ffmpeg-sdl2.js'
       ></Script>
       <Drawer
-        css={css`
-          width: 550px;
-        `}
         anchor='left'
         open={drawer}
         onClose={() => {
@@ -211,66 +216,73 @@ const Page: NextPage = () => {
           }
         }}
       >
-        <div>web-ts-player</div>
-        <div
-          css={css`
-            margin: 10px auto;
-          `}
-        >
-          <TextField
-            label='mirakurun server'
-            placeholder='http://mirakurun:40772'
-            onChange={ev => {
-              setMirakurunServer(ev.target.value)
-            }}
-            value={mirakurunServer}
-          ></TextField>
-        </div>
-        <div>{mirakurunOk ? 'OK: ' + mirakurunVersion : 'NG'}</div>
-        <div
-          css={css`
-            margin: 10px auto;
-            width: 100%;
-          `}
-        >
-          <Select
+        <Box css={css`
+            width: 320px;
+            padding: 20px 24px;
+          `}>
+          <div css={css`
+            font-weight: bold;
+            font-size: 19px;
+          `}>Web-TS-Player</div>
+          <div css={css`margin-top: 28px;`}>
+            <TextField
+              label='Mirakurun Server'
+              placeholder='http://mirakurun:40772'
+              css={css`width: 100%;`}
+              onChange={ev => {
+                setMirakurunServer(ev.target.value)
+              }}
+              value={mirakurunServer}
+            ></TextField>
+          </div>
+          <div css={css`margin-top: 16px;`}>Mirakurun: {mirakurunOk ? `OK (version: ${mirakurunVersion})` : 'NG'}</div>
+          <FormControl fullWidth
             css={css`
+              margin-top: 24px;
               width: 100%;
-            `}
-            defaultValue={
-              activeService
-                ? activeService
-                : tvServices.length > 0
-                ? tvServices[0].id
-                : null
-            }
-            onChange={ev => {
-              if (
-                ev.target.value !== null &&
-                typeof ev.target.value === 'number'
-              ) {
-                setActiveService(ev.target.value)
+            `}>
+            <InputLabel id="demo-simple-select-label">Services</InputLabel>
+            <Select
+              css={css`
+                width: 100%;
+              `}
+              label='Services'
+              labelId="demo-simple-select-label"
+              defaultValue={
+                activeService
+                  ? activeService
+                  : tvServices.length > 0
+                  ? tvServices[0].id
+                  : null
               }
-              setDrawer(false)
-            }}
-          >
-            {getServicesOptions()}
-          </Select>
-        </div>
-        <div>{activeService}</div>
-        <div>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={doDeinterlace}
-                  onChange={ev => setDoDeinterlace(ev.target.checked)}
-                ></Checkbox>
-              }
-              label='インターレース解除'
-            ></FormControlLabel>
-          </FormGroup>
-        </div>
+              onChange={ev => {
+                if (
+                  ev.target.value !== null &&
+                  typeof ev.target.value === 'number'
+                ) {
+                  setActiveService(ev.target.value)
+                }
+                setDrawer(false)
+              }}
+            >
+              {getServicesOptions()}
+            </Select>
+          </FormControl>
+          <div css={css`margin-top: 16px;`}>Active Service: {activeService}</div>
+          <div css={css`margin-top: 16px;`}>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={doDeinterlace}
+                    onChange={ev => setDoDeinterlace(ev.target.checked)}
+                  ></Checkbox>
+                }
+                label='インターレースを解除する'
+              ></FormControlLabel>
+            </FormGroup>
+          </div>
+        </Box>
       </Drawer>
 
       <canvas
@@ -278,6 +290,11 @@ const Page: NextPage = () => {
         tabIndex={-1}
         width={1920}
         height={1080}
+        css={css`
+          max-width: 100%;
+          max-height: 100%;
+          aspect-ratio: 16 / 9;
+        `}
         onClick={() => setDrawer(true)}
         onContextMenu={ev => ev.preventDefault()}
       ></canvas>
