@@ -60,7 +60,6 @@ jobs:
           key: ${{env.EM_VERSION}}-${{ runner.os}}-cmake-build
         if: matrix.language == 'cpp'
 
-
       - uses: mymindstorm/setup-emsdk@v11
         with:
           version: ${{env.EM_VERSION}}
@@ -76,9 +75,9 @@ jobs:
           # Prefix the list here with "+" to use these queries and those in the config file.
           # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
-    - name: Autobuild
-      uses: github/codeql-action/autobuild@v1
-      if: matrix.language == 'javascript'
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v1
+        if: matrix.language == 'javascript'
 
       - run: |
           mkdir wasm/build
