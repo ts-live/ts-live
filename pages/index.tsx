@@ -257,7 +257,9 @@ const Page: NextPage = () => {
           <div css={css`
             font-weight: bold;
             font-size: 19px;
-          `}>Web-TS-Player</div>
+          `}>
+            Web-TS-Player
+          </div>
           <div css={css`margin-top: 28px;`}>
             <TextField
               label='Mirakurun Server'
@@ -275,13 +277,13 @@ const Page: NextPage = () => {
               margin-top: 24px;
               width: 100%;
             `}>
-            <InputLabel id="demo-simple-select-label">Services</InputLabel>
+            <InputLabel id="services-label">Services</InputLabel>
             <Select
               css={css`
                 width: 100%;
               `}
               label='Services'
-              labelId="demo-simple-select-label"
+              labelId="services-label"
               defaultValue={
                 activeService
                   ? activeService
