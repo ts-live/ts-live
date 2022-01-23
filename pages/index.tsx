@@ -16,6 +16,15 @@ import {
   Select,
   TextField
 } from '@mui/material'
+import {
+  CartesianGrid,
+  LineChart,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Line,
+  Legend
+} from 'recharts'
 
 declare interface WasmModule extends EmscriptenModule {
   getExceptionMsg(ex: number): string
@@ -23,6 +32,7 @@ declare interface WasmModule extends EmscriptenModule {
   setLogLevelInfo(): void
   showVersionInfo(): void
   setCaptionCallback(callback: (captionData: Uint8Array) => void): void
+  setStatsCallback(callback: (statsDataList: Array<StatsData>) => void): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -36,6 +46,14 @@ declare interface TvService {
   serviceId: number
   networkId: number
   hasLogoData: boolean
+}
+
+declare interface StatsData {
+  time: number
+  VideoFrameQueueSize: number
+  AudioFrameQueueSize: number
+  SDLQueuedAudioSize: number
+  InputBufferSize: number
 }
 
 const Page: NextPage = () => {
@@ -57,6 +75,16 @@ const Page: NextPage = () => {
     false
   )
   const [stopFunc, setStopFunc] = useState(() => () => {})
+  const [chartData, setChartData] = useState<Array<StatsData>>([
+    {
+      time: 0,
+      VideoFrameQueueSize: 0,
+      AudioFrameQueueSize: 0,
+      InputBufferSize: 0,
+      SDLQueuedAudioSize: 0
+    }
+  ])
+  const [showCharts, setShowCharts] = useState<boolean>(false)
 
   useEffect(() => {
     fetch(`${mirakurunServer}/api/version`)
@@ -127,8 +155,14 @@ const Page: NextPage = () => {
     stopFunc()
 
     // ARIB字幕パケットそのものを受け取るコールバック
-    Module.setCaptionCallback(captionData => {
-      // console.log('Caption Callback', captionData)
+    // Module.setCaptionCallback(captionData => {
+    //   console.log('Caption Callback', captionData)
+    // })
+    Module.setStatsCallback(statsDataList => {
+      setChartData(prev => [
+        ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
+        ...statsDataList
+      ])
     })
     Module.setDeinterlace(doDeinterlace || false)
 
@@ -279,25 +313,129 @@ const Page: NextPage = () => {
                   ></Checkbox>
                 }
                 label='インターレースを解除する'
+            ></FormControlLabel>
+          </FormGroup>
+          </div>
+          <div>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showCharts}
+                    onChange={ev => setShowCharts(ev.target.checked)}
+                  ></Checkbox>
+                }
+                label='統計グラフ表示'
               ></FormControlLabel>
             </FormGroup>
           </div>
         </Box>
       </Drawer>
-
-      <canvas
-        id='video'
-        tabIndex={-1}
-        width={1920}
-        height={1080}
+      <div
         css={css`
-          max-width: 100%;
-          max-height: 100%;
-          aspect-ratio: 16 / 9;
+          position: relative;
+          width: 100%;
+          height: 100%;
         `}
-        onClick={() => setDrawer(true)}
-        onContextMenu={ev => ev.preventDefault()}
-      ></canvas>
+      >
+        <canvas
+          css={css`
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100%;
+            max-height: 100%;
+          `}
+          id='video'
+          tabIndex={-1}
+          width={1920}
+          height={1080}
+          onClick={() => setDrawer(true)}
+          onContextMenu={ev => ev.preventDefault()}
+        ></canvas>
+        <div
+          css={css`
+            display: ${showCharts ? 'flex' : 'none'};
+            align-content: flex-start;
+            flex-direction: column;
+            flex-wrap: wrap;
+            position: absolute;
+            left: 0px;
+            top: 0px;
+            width: 100%;
+            height: 100%;
+            padding: 28px 12px;
+            pointer-events: none;
+          `}
+        >
+          <LineChart
+            width={550}
+            height={250}
+            data={chartData}
+            css={css`
+              position: absolute;
+              left: 0px;
+              top: 0px;
+            `}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='VideoFrameQueueSize'
+              name='Video Queue Size'
+              stroke='#8884d8'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart width={550} height={250} data={chartData}>
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='AudioFrameQueueSize'
+              name='Audio Queue Size'
+              stroke='#82ca9d'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart width={550} height={250} data={chartData}>
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='SDLQueuedAudioSize'
+              name='SDL Audio Queue Size'
+              stroke='#9d82ca'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart width={550} height={250} data={chartData}>
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='InputBufferSize'
+              name='Input Buffer Size'
+              stroke='#ca829d'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+        </div>
+      </div>
     </Box>
   )
 }
