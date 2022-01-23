@@ -252,7 +252,7 @@ const Page: NextPage = () => {
       >
         <Box css={css`
             width: 320px;
-            padding: 20px 24px;
+            padding: 24px 24px;
           `}>
           <div css={css`
             font-weight: bold;
@@ -325,7 +325,7 @@ const Page: NextPage = () => {
                     onChange={ev => setShowCharts(ev.target.checked)}
                   ></Checkbox>
                 }
-                label='統計グラフ表示'
+                label='統計グラフを表示する'
               ></FormControlLabel>
             </FormGroup>
           </div>
