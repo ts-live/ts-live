@@ -1,0 +1,7 @@
+paths:
+  - src
+  - wasm
+paths-ignore:
+  - src/node_modules
+  - wasm/build/ffmpeg-prefix
+  - wasm/build/_deps
