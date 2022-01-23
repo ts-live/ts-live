@@ -44,21 +44,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Setup cache for emsdk
-        id: cache-system-libraries
-        uses: actions/cache@v2
-        with:
-          path: ${{env.EM_CACHE_FOLDER}}
-          key: ${{ matrix.language }}-${{env.EM_VERSION}}-${{ runner.os }}
-        if: matrix.language == 'cpp'
+      # - name: Setup cache for emsdk
+      #   id: cache-system-libraries
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: ${{env.EM_CACHE_FOLDER}}
+      #     key: ${{ matrix.language }}-${{env.EM_VERSION}}-${{ runner.os }}
+      #   if: matrix.language == 'cpp'
 
-      - name: Setup cache for CMake build
-        id: cache-cmake-build
-        uses: actions/cache@v2
-        with:
-          path: wasm/build
-          key: ${{env.EM_VERSION}}-${{ runner.os}}-cmake-build
-        if: matrix.language == 'cpp'
+      # - name: Setup cache for CMake build
+      #   id: cache-cmake-build
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: wasm/build
+      #     key: ${{env.EM_VERSION}}-${{ runner.os}}-cmake-build
+      #   if: matrix.language == 'cpp'
 
       - uses: mymindstorm/setup-emsdk@v11
         with:
