@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ${{env.EM_CACHE_FOLDER}}
-          key: ${{env.EM_VERSION}}-${{ runner.os }}
+          key: ${{ matrix.language }}-${{env.EM_VERSION}}-${{ runner.os }}
         if: matrix.language == 'cpp'
 
       - name: Setup cache for CMake build
