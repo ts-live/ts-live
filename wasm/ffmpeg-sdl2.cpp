@@ -51,6 +51,8 @@ std::condition_variable waitCv;
 size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 
+std::chrono::system_clock::time_point startTime;
+
 // for SDL
 context ctx;
 
@@ -60,13 +62,20 @@ std::deque<std::vector<uint8_t>> captionDataQueue;
 std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
 
+AVStream *videoStream = nullptr;
+AVStream *audioStream = nullptr;
+AVStream *captionStream = nullptr;
+
 int64_t initPts = -1;
 
 bool reseted = false;
 
 bool doDeinterlace = false;
 
+std::vector<emscripten::val> statsBuffer;
+
 emscripten::val captionCallback = emscripten::val::null();
+emscripten::val statsCallback = emscripten::val::null();
 } // namespace
 
 // utility
@@ -89,6 +98,11 @@ void setDeinterlace(bool deinterlace) { doDeinterlace = deinterlace; }
 // Callback register
 void setCaptionCallback(emscripten::val callback) {
   captionCallback = callback;
+}
+
+void setStatsCallback(emscripten::val callback) {
+  //
+  statsCallback = callback;
 }
 
 // Buffer control
@@ -151,6 +165,10 @@ void reset() {
       av_frame_free(&frame);
     }
   }
+  videoStream = nullptr;
+  audioStream = nullptr;
+  captionStream = nullptr;
+
   // SDL Audio
   SDL_ClearQueuedAudio(ctx.dev);
 }
@@ -162,10 +180,6 @@ void decoderThread() {
   uint8_t *ibuf = nullptr;
   size_t ibufSize = 64 * 1024;
   size_t requireBufSize = 2 * 1024 * 1024;
-
-  AVStream *videoStream = nullptr;
-  AVStream *audioStream = nullptr;
-  AVStream *captionStream = nullptr;
 
   const AVCodec *videoCodec = nullptr;
   const AVCodec *audioCodec = nullptr;
@@ -550,9 +564,31 @@ void decoderThread() {
 }
 
 void mainloop(void *arg) {
-
   // mainloop
   // spdlog::info("mainloop! {}", videoFrameQueue.size());
+
+  if (videoStream && audioStream && !statsCallback.isNull()) {
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now() - startTime);
+    auto data = emscripten::val::object();
+    data.set("time", duration.count() / 1000.0);
+    data.set("VideoFrameQueueSize", videoFrameQueue.size());
+    data.set("AudioFrameQueueSize", audioFrameQueue.size());
+    data.set("SDLQueuedAudioSize", SDL_GetQueuedAudioSize(ctx.dev) /
+                                       audioStream->codecpar->channels *
+                                       sizeof(float));
+    data.set("InputBufferSize", inputBufferWriteIndex - inputBufferReadIndex);
+    statsBuffer.push_back(std::move(data));
+    if (statsBuffer.size() >= 6) {
+      auto statsArray = emscripten::val::array();
+      for (int i = 0; i < statsBuffer.size(); i++) {
+        statsArray.set(i, statsBuffer[i]);
+      }
+      statsBuffer.clear();
+      statsCallback(statsArray);
+    }
+  }
+
   if (videoFrameQueue.size() > 0 && audioFrameQueue.size() > 0) {
     // std::lock_guard<std::mutex> lock(videoFrameMtx);
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
@@ -710,6 +746,7 @@ void mainloop(void *arg) {
 
 int main() {
   spdlog::info("Wasm main() started.");
+  startTime = std::chrono::system_clock::now();
 
   // SDL初期化
   SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
@@ -762,6 +799,7 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("getExceptionMsg", &getExceptionMsg);
   emscripten::function("showVersionInfo", &showVersionInfo);
   emscripten::function("setCaptionCallback", &setCaptionCallback);
+  emscripten::function("setStatsCallback", &setStatsCallback);
   emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
