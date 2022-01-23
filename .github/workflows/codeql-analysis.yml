@@ -82,9 +82,7 @@ jobs:
         if: matrix.language == 'javascript'
 
       - run: |
-          mkdir -p wasm/build
-          cd wasm/build
-          emcmake cmake -DCMAKE_BUILD_TYPE=Release ..
+          [ -d wasm/build ] || mkdir wasm/build && cd wasm/build && emcmake cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --parallel 2
         if: matrix.language == 'cpp'
 
