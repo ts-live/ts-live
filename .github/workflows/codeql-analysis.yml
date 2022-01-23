@@ -12,7 +12,7 @@
 name: 'CodeQL'
 
 env:
-  EM_VERSION: 3.1.2
+  EM_VERSION: 3.1.0
   EM_CACHE_FOLDER: 'emsdk-cache'
 
 on:
@@ -50,6 +50,16 @@ jobs:
         with:
           path: ${{env.EM_CACHE_FOLDER}}
           key: ${{env.EM_VERSION}}-${{ runner.os }}
+        if: matrix.language == 'cpp'
+
+      - name: Setup cache for CMake build
+        id: cache-cmake-build
+        uses: actions/cache@v2
+        with:
+          path: wasm/build
+          key: ${{env.EM_VERSION}}-${{ runner.os}}-cmake-build
+        if: matrix.language == 'cpp'
+
 
       - uses: mymindstorm/setup-emsdk@v11
         with:
@@ -66,11 +76,16 @@ jobs:
           # Prefix the list here with "+" to use these queries and those in the config file.
           # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v1
+      if: matrix.language == 'javascript'
+
       - run: |
           mkdir wasm/build
           cd wasm/build
           emcmake cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --parallel 2
+        if: matrix.language == 'cpp'
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v1
