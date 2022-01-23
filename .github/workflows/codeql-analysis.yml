@@ -64,6 +64,7 @@ jobs:
         with:
           version: ${{env.EM_VERSION}}
           actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
+        if: matrix.language == 'cpp'
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
