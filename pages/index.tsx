@@ -8,8 +8,10 @@ import {
   Box,
   Checkbox,
   Drawer,
+  FormControl,
   FormControlLabel,
   FormGroup,
+  InputLabel,
   MenuItem,
   Select,
   TextField
@@ -31,7 +33,7 @@ declare interface WasmModule extends EmscriptenModule {
   showVersionInfo(): void
   setCaptionCallback(callback: (captionData: Uint8Array) => void): void
   setStatsCallback(
-    callback: (statsDataList: Array<StatsData>) => void | null
+    callback: ((statsDataList: Array<StatsData>) => void) | null
   ): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
@@ -84,10 +86,7 @@ const Page: NextPage = () => {
       SDLQueuedAudioSize: 0
     }
   ])
-  const [showCharts, setShowCharts] = useLocalStorage<boolean>(
-    'tsplayerShowStatsCharts',
-    false
-  )
+  const [showCharts, setShowCharts] = useState<boolean>(false)
 
   const statsCallback = useCallback(statsDataList => {
     setChartData(prev => [
@@ -169,6 +168,12 @@ const Page: NextPage = () => {
     //   console.log('Caption Callback', captionData)
     // })
     Module.setDeinterlace(doDeinterlace || false)
+    if (showCharts) {
+      // depsに入れると毎回リスタートするので入れない
+      Module.setStatsCallback(statsCallback)
+    } else {
+      Module.setStatsCallback(null)
+    }
 
     // 再生スタート
     const ac = new AbortController()
@@ -223,7 +228,15 @@ const Page: NextPage = () => {
   }, [tvServices])
 
   return (
-    <Box>
+    <Box
+      css={css`
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #1e1e1e;
+      `}
+    >
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
@@ -239,9 +252,6 @@ const Page: NextPage = () => {
         src='/wasm/ffmpeg-sdl2.js'
       ></Script>
       <Drawer
-        css={css`
-          width: 550px;
-        `}
         anchor='left'
         open={drawer}
         onClose={() => {
@@ -251,106 +261,140 @@ const Page: NextPage = () => {
           }
         }}
       >
-        <div>web-ts-player</div>
-        <div
+        <Box
           css={css`
-            margin: 10px auto;
+            width: 320px;
+            padding: 24px 24px;
           `}
         >
-          <TextField
-            label='mirakurun server'
-            placeholder='http://mirakurun:40772'
-            onChange={ev => {
-              setMirakurunServer(ev.target.value)
-            }}
-            value={mirakurunServer}
-          ></TextField>
-        </div>
-        <div>{mirakurunOk ? 'OK: ' + mirakurunVersion : 'NG'}</div>
-        <div
-          css={css`
-            margin: 10px auto;
-            width: 100%;
-          `}
-        >
-          <Select
+          <div
             css={css`
+              font-weight: bold;
+              font-size: 19px;
+            `}
+          >
+            Web-TS-Player
+          </div>
+          <div
+            css={css`
+              margin-top: 28px;
+            `}
+          >
+            <TextField
+              label='Mirakurun Server'
+              placeholder='http://mirakurun:40772'
+              css={css`
+                width: 100%;
+              `}
+              onChange={ev => {
+                setMirakurunServer(ev.target.value)
+              }}
+              value={mirakurunServer}
+            ></TextField>
+          </div>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            Mirakurun:{' '}
+            {mirakurunOk ? `OK (version: ${mirakurunVersion})` : 'NG'}
+          </div>
+          <FormControl
+            fullWidth
+            css={css`
+              margin-top: 24px;
               width: 100%;
             `}
-            defaultValue={
-              activeService
-                ? activeService
-                : tvServices.length > 0
-                ? tvServices[0].id
-                : null
-            }
-            onChange={ev => {
-              if (
-                ev.target.value !== null &&
-                typeof ev.target.value === 'number'
-              ) {
-                setActiveService(ev.target.value)
-              }
-              setDrawer(false)
-            }}
           >
-            {getServicesOptions()}
-          </Select>
-        </div>
-        <div>{activeService}</div>
-        <div>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={doDeinterlace}
-                  onChange={ev => setDoDeinterlace(ev.target.checked)}
-                ></Checkbox>
+            <InputLabel id='services-label'>Services</InputLabel>
+            <Select
+              css={css`
+                width: 100%;
+              `}
+              label='Services'
+              labelId='services-label'
+              defaultValue={
+                activeService
+                  ? activeService
+                  : tvServices.length > 0
+                  ? tvServices[0].id
+                  : null
               }
-              label='インターレース解除'
-            ></FormControlLabel>
-          </FormGroup>
-        </div>
-        <div>
-          <FormGroup>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={showCharts}
-                  onLoad={() => {
-                    if (showCharts) {
-                      Module.setStatsCallback(statsCallback)
-                    } else {
-                      Module.setStatsCallback(null)
-                    }
-                  }}
-                  onChange={ev => {
-                    setShowCharts(ev.target.checked)
-                    if (ev.target.checked) {
-                      Module.setStatsCallback(statsCallback)
-                    } else {
-                      Module.setStatsCallback(null)
-                    }
-                  }}
-                ></Checkbox>
-              }
-              label='統計グラフ表示'
-            ></FormControlLabel>
-          </FormGroup>
-        </div>
+              onChange={ev => {
+                if (
+                  ev.target.value !== null &&
+                  typeof ev.target.value === 'number'
+                ) {
+                  setActiveService(ev.target.value)
+                }
+                setDrawer(false)
+              }}
+            >
+              {getServicesOptions()}
+            </Select>
+          </FormControl>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            Active Service: {activeService}
+          </div>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={doDeinterlace}
+                    onChange={ev => setDoDeinterlace(ev.target.checked)}
+                  ></Checkbox>
+                }
+                label='インターレースを解除する'
+              ></FormControlLabel>
+            </FormGroup>
+          </div>
+          <div>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showCharts}
+                    onChange={ev => {
+                      setShowCharts(ev.target.checked)
+                      if (ev.target.checked) {
+                        Module.setStatsCallback(statsCallback)
+                      } else {
+                        Module.setStatsCallback(null)
+                      }
+                    }}
+                  ></Checkbox>
+                }
+                label='統計グラフを表示する'
+              ></FormControlLabel>
+            </FormGroup>
+          </div>
+        </Box>
       </Drawer>
       <div
         css={css`
           position: relative;
+          width: 100%;
+          height: 100%;
         `}
       >
         <canvas
           css={css`
             position: absolute;
-            left: 0px;
-            top: 0px;
-            width: 100%;
-            max-width: 1920px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 100%;
+            max-height: 100%;
           `}
           id='video'
           tabIndex={-1}
@@ -361,10 +405,17 @@ const Page: NextPage = () => {
         ></canvas>
         <div
           css={css`
+            display: ${showCharts ? 'flex' : 'none'};
+            align-content: flex-start;
+            flex-direction: column;
+            flex-wrap: wrap;
             position: absolute;
             left: 0px;
-            top: 10px;
-            display: ${showCharts ? 'block' : 'none'};
+            top: 0px;
+            width: 100%;
+            height: 100%;
+            padding: 28px 12px;
+            pointer-events: none;
           `}
         >
           <LineChart
