@@ -30,7 +30,9 @@ declare interface WasmModule extends EmscriptenModule {
   setLogLevelInfo(): void
   showVersionInfo(): void
   setCaptionCallback(callback: (captionData: Uint8Array) => void): void
-  setStatsCallback(callback: (statsDataList: Array<StatsData>) => void): void
+  setStatsCallback(
+    callback: (statsDataList: Array<StatsData>) => void | null
+  ): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -82,7 +84,17 @@ const Page: NextPage = () => {
       SDLQueuedAudioSize: 0
     }
   ])
-  const [showCharts, setShowCharts] = useState<boolean>(false)
+  const [showCharts, setShowCharts] = useLocalStorage<boolean>(
+    'tsplayerShowStatsCharts',
+    false
+  )
+
+  const statsCallback = useCallback(statsDataList => {
+    setChartData(prev => [
+      ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
+      ...statsDataList
+    ])
+  }, [])
 
   useEffect(() => {
     fetch(`${mirakurunServer}/api/version`)
@@ -156,12 +168,6 @@ const Page: NextPage = () => {
     // Module.setCaptionCallback(captionData => {
     //   console.log('Caption Callback', captionData)
     // })
-    Module.setStatsCallback(function statsCallback (statsDataList) {
-      setChartData(prev => [
-        ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
-        ...statsDataList
-      ])
-    })
     Module.setDeinterlace(doDeinterlace || false)
 
     // 再生スタート
@@ -311,7 +317,21 @@ const Page: NextPage = () => {
               control={
                 <Checkbox
                   checked={showCharts}
-                  onChange={ev => setShowCharts(ev.target.checked)}
+                  onLoad={() => {
+                    if (showCharts) {
+                      Module.setStatsCallback(statsCallback)
+                    } else {
+                      Module.setStatsCallback(null)
+                    }
+                  }}
+                  onChange={ev => {
+                    setShowCharts(ev.target.checked)
+                    if (ev.target.checked) {
+                      Module.setStatsCallback(statsCallback)
+                    } else {
+                      Module.setStatsCallback(null)
+                    }
+                  }}
                 ></Checkbox>
               }
               label='統計グラフ表示'
