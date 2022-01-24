@@ -156,7 +156,7 @@ const Page: NextPage = () => {
     // Module.setCaptionCallback(captionData => {
     //   console.log('Caption Callback', captionData)
     // })
-    Module.setStatsCallback(statsDataList => {
+    Module.setStatsCallback(function statsCallback (statsDataList) {
       setChartData(prev => [
         ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
         ...statsDataList
@@ -350,7 +350,7 @@ const Page: NextPage = () => {
           <LineChart
             width={550}
             height={250}
-            data={chartData}
+            data={showCharts ? chartData : []}
             css={css`
               position: absolute;
               left: 0px;
@@ -370,7 +370,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
@@ -384,7 +388,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
@@ -398,7 +406,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
