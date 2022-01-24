@@ -32,7 +32,9 @@ declare interface WasmModule extends EmscriptenModule {
   setLogLevelInfo(): void
   showVersionInfo(): void
   setCaptionCallback(callback: (captionData: Uint8Array) => void): void
-  setStatsCallback(callback: (statsDataList: Array<StatsData>) => void): void
+  setStatsCallback(
+    callback: ((statsDataList: Array<StatsData>) => void) | null
+  ): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -85,6 +87,13 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
+
+  const statsCallback = useCallback(statsDataList => {
+    setChartData(prev => [
+      ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
+      ...statsDataList
+    ])
+  }, [])
 
   useEffect(() => {
     fetch(`${mirakurunServer}/api/version`)
@@ -158,13 +167,13 @@ const Page: NextPage = () => {
     // Module.setCaptionCallback(captionData => {
     //   console.log('Caption Callback', captionData)
     // })
-    Module.setStatsCallback(statsDataList => {
-      setChartData(prev => [
-        ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
-        ...statsDataList
-      ])
-    })
     Module.setDeinterlace(doDeinterlace || false)
+    if (showCharts) {
+      // depsに入れると毎回リスタートするので入れない
+      Module.setStatsCallback(statsCallback)
+    } else {
+      Module.setStatsCallback(null)
+    }
 
     // 再生スタート
     const ac = new AbortController()
@@ -219,13 +228,15 @@ const Page: NextPage = () => {
   }, [tvServices])
 
   return (
-    <Box css={css`
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: #1E1E1E;
-    `}>
+    <Box
+      css={css`
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #1e1e1e;
+      `}
+    >
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
@@ -250,40 +261,59 @@ const Page: NextPage = () => {
           }
         }}
       >
-        <Box css={css`
+        <Box
+          css={css`
             width: 320px;
             padding: 24px 24px;
-          `}>
-          <div css={css`
-            font-weight: bold;
-            font-size: 19px;
-          `}>
+          `}
+        >
+          <div
+            css={css`
+              font-weight: bold;
+              font-size: 19px;
+            `}
+          >
             Web-TS-Player
           </div>
-          <div css={css`margin-top: 28px;`}>
+          <div
+            css={css`
+              margin-top: 28px;
+            `}
+          >
             <TextField
               label='Mirakurun Server'
               placeholder='http://mirakurun:40772'
-              css={css`width: 100%;`}
+              css={css`
+                width: 100%;
+              `}
               onChange={ev => {
                 setMirakurunServer(ev.target.value)
               }}
               value={mirakurunServer}
             ></TextField>
           </div>
-          <div css={css`margin-top: 16px;`}>Mirakurun: {mirakurunOk ? `OK (version: ${mirakurunVersion})` : 'NG'}</div>
-          <FormControl fullWidth
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            Mirakurun:{' '}
+            {mirakurunOk ? `OK (version: ${mirakurunVersion})` : 'NG'}
+          </div>
+          <FormControl
+            fullWidth
             css={css`
               margin-top: 24px;
               width: 100%;
-            `}>
-            <InputLabel id="services-label">Services</InputLabel>
+            `}
+          >
+            <InputLabel id='services-label'>Services</InputLabel>
             <Select
               css={css`
                 width: 100%;
               `}
               label='Services'
-              labelId="services-label"
+              labelId='services-label'
               defaultValue={
                 activeService
                   ? activeService
@@ -304,8 +334,18 @@ const Page: NextPage = () => {
               {getServicesOptions()}
             </Select>
           </FormControl>
-          <div css={css`margin-top: 16px;`}>Active Service: {activeService}</div>
-          <div css={css`margin-top: 16px;`}>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            Active Service: {activeService}
+          </div>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
             <FormGroup>
               <FormControlLabel
                 control={
@@ -315,8 +355,8 @@ const Page: NextPage = () => {
                   ></Checkbox>
                 }
                 label='インターレースを解除する'
-            ></FormControlLabel>
-          </FormGroup>
+              ></FormControlLabel>
+            </FormGroup>
           </div>
           <div>
             <FormGroup>
@@ -324,7 +364,14 @@ const Page: NextPage = () => {
                 control={
                   <Checkbox
                     checked={showCharts}
-                    onChange={ev => setShowCharts(ev.target.checked)}
+                    onChange={ev => {
+                      setShowCharts(ev.target.checked)
+                      if (ev.target.checked) {
+                        Module.setStatsCallback(statsCallback)
+                      } else {
+                        Module.setStatsCallback(null)
+                      }
+                    }}
                   ></Checkbox>
                 }
                 label='統計グラフを表示する'
@@ -374,7 +421,7 @@ const Page: NextPage = () => {
           <LineChart
             width={550}
             height={250}
-            data={chartData}
+            data={showCharts ? chartData : []}
             css={css`
               position: absolute;
               left: 0px;
@@ -394,7 +441,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
@@ -408,7 +459,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
@@ -422,7 +477,11 @@ const Page: NextPage = () => {
               dot={false}
             />
           </LineChart>
-          <LineChart width={550} height={250} data={chartData}>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
             <CartesianGrid strokeDasharray={'3 3'} />
             <XAxis dataKey='time' />
             <YAxis />
