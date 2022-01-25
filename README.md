@@ -27,3 +27,7 @@ $ yarn dev
 - mixed content の関係で mirakurun サーバと http/https 混在は出来ない
 
 上記 2 制約から、「http://localhostでアクセスしてmirakurunにhttp接続」または「httpsサーバに接続してmirakurunにもhttps接続」のどちらかでないと動きません。
+
+## ファイル再生機能
+
+開発目的なのであまり利便性とか力を入れてません。
