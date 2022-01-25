@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 #add_compile_options(-matomics -mbulk-memory -std=c++17)
 
+find_package(Threads)
 include(FetchContent)
 FetchContent_Declare(
   SDL2
@@ -31,6 +32,38 @@ if(NOT SDL2_POPULATED)
   FetchContent_Populate(SDL2)
   add_subdirectory(${sdl2_SOURCE_DIR} ${sdl2_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
+
+
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
+file(TO_NATIVE_PATH ${CMAKE_COMMAND} native_cmake_command)
+file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/halide native_cmake_current_source_dir)
+execute_process(
+    COMMAND "sh" "-c" "CC= CXX= CMAKE_CROSSCOMPILING= ${native_cmake_command} -G\"${CMAKE_GENERATOR}\" -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} ${native_cmake_current_source_dir}"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools
+)
+
+add_custom_target(generator
+    COMMAND ${CMAKE_COMMAND} --build . --config $<CONFIG> --parallel 24
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools
+)
+include(${CMAKE_CURRENT_BINARY_DIR}/host_tools/host_tools.cmake)
+
+# include(${CMAKE_CURRENT_BINARY_DIR}/host_tools/_deps/halide-src/cmake/HalideTargetHelpers.cmake)
+# include(${CMAKE_CURRENT_BINARY_DIR}/host_tools/_deps/halide-src/cmake/HalideGeneratorHelpers.cmake)
+# set(HALIDE_TARGET_WASM "wasm-32-wasmrt-wasm_bulk_memory-wasm_simd128-wasm_sat_float_to_int-wasm_signext")
+# add_halide_library(deinterlace_wasm FROM dif_gen GENERATOR deinterlace TARGETS ${HALIDE_TARGET_WASM} AUTOSCHEDULER Halide::Adams2019 PARAMS auto_schedule=true)
+
+add_dependencies(dif_gen generator)
+make_directory(${CMAKE_CURRENT_BINARY_DIR}/halide_lib)
+add_custom_target(deinterlace_wasm
+  COMMAND ${CMAKE_CURRENT_BINARY_DIR}/host_tools/dif_gen
+    -g deinterlace
+    -o ${CMAKE_CURRENT_BINARY_DIR}/halide_lib
+    -p ${CMAKE_CURRENT_BINARY_DIR}/host_tools/_deps/halide-build/src/autoschedulers/adams2019/libautoschedule_adams2019.so
+    -s Adams2019
+    target=wasm-32-wasmrt-wasm_bulk_memory-wasm_simd128-wasm_sat_float_to_int-wasm_signext-wasm_threads
+)
+add_dependencies(deinterlace_wasm dif_gen)
 
 set(FFMPEG_CONFIGURE_COMMAND_LIST
   emconfigure ./configure
@@ -94,19 +127,21 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c)
+add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp)
 # set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
 add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
 target_compile_features(ffmpeg-sdl2 PRIVATE cxx_std_20)
-target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
-target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
+target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg ${CMAKE_CURRENT_BINARY_DIR}/halide_lib ${CMAKE_CURRENT_BINARY_DIR}/host_tools/_deps/halide-build/include/)
+target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/halide_lib/deinterlace.a)
+add_dependencies(ffmpeg-sdl2 deinterlace_wasm)
 target_link_options(ffmpeg-sdl2 PRIVATE
   "-Wno-pthreads-mem-growth"
   "SHELL:-s ALLOW_MEMORY_GROWTH=1"
   "SHELL:-s WASM=1"
   "SHELL:-s USE_PTHREADS=1"
   # "SHELL:-s PROXY_TO_PTHREAD=1"
+  "SHELL:-s ASSERTIONS=1"
   "SHELL:-s USE_SDL=2"
   "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"

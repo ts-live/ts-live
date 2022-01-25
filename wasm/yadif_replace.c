@@ -4,6 +4,9 @@
 #include <libavfilter/video.h>
 #include <libavfilter/yadif.h>
 
+void halide_yadif(int w, int linesize, int h, int parity, int tff, uint8_t *out,
+                  uint8_t *prev, uint8_t *cur, uint8_t *next);
+
 typedef struct ThreadData {
   AVFrame *frame;
   int plane;
@@ -52,8 +55,6 @@ static int filter_slice(AVFilterContext *ctx, void *arg, int jobnr,
 
 static void yadif_filter(AVFilterContext *ctx, AVFrame *dstpic, int parity,
                          int tff) {
-  printf("custom yadif_filter called\n");
-
   YADIFContext *yadif = ctx->priv;
   ThreadData td = {.frame = dstpic, .parity = parity, .tff = tff};
   int i;
@@ -71,8 +72,12 @@ static void yadif_filter(AVFilterContext *ctx, AVFrame *dstpic, int parity,
     td.h = h;
     td.plane = i;
 
-    ff_filter_execute(ctx, filter_slice, &td, NULL,
-                      FFMIN(h, ff_filter_get_nb_threads(ctx)));
+    halide_yadif(w, dstpic->linesize[i], h, parity, tff, dstpic->data[i],
+                 yadif->prev->data[i], yadif->cur->data[i],
+                 yadif->next->data[i]);
+
+    // ff_filter_execute(ctx, filter_slice, &td, NULL,
+    //                   FFMIN(h, ff_filter_get_nb_threads(ctx)));
   }
 
   emms_c();
