@@ -107,11 +107,15 @@ const Page: NextPage = () => {
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
 
-  const statsCallback = useCallback(statsDataList => {
-    setChartData(prev => [
-      ...(prev.length >= 300 ? prev.slice(statsDataList.length) : prev),
-      ...statsDataList
-    ])
+  const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
+    setChartData(prev => {
+      if (prev.length + statsDataList.length > 300) {
+        const overLength = prev.length + statsDataList.length - 300
+        prev.copyWithin(0, overLength)
+        prev.length -= statsDataList.length + overLength
+      }
+      return prev.concat(statsDataList)
+    })
   }, [])
 
   useEffect(() => {
