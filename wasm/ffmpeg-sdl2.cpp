@@ -25,6 +25,8 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
+
+void set_yadif_filter(AVFilterContext *ctx);
 }
 
 struct context {
@@ -502,6 +504,12 @@ void decoderThread() {
   }
   avfilter_inout_free(&inputs);
   avfilter_inout_free(&outputs);
+
+  AVFilterContext *yadifFilterContext =
+      avfilter_graph_get_filter(filterGraph, "Parsed_yadif_0");
+  // spdlog::info("filterGraph Dump: {}", avfilter_graph_dump(filterGraph,
+  // NULL));
+  set_yadif_filter(yadifFilterContext);
 
   // decode phase
   while (!resetedDecoder) {
