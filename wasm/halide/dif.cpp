@@ -1,7 +1,7 @@
 #include <Halide.h>
 
 using Halide::ConciseCasts::i16;
-using Halide::ConciseCasts::u8;
+using Halide::ConciseCasts::u8_sat;
 
 class DeinterlaceFilter : public Halide::Generator<DeinterlaceFilter> {
 public:
@@ -86,8 +86,8 @@ public:
 
     out(x, y) = Halide::select(
         ((y ^ parity) & 1) == 1,
-        u8(Halide::clamp(i16(spatial_pred0(x, y)), d(x, y) - diff2(x, y),
-                         d(x, y) + diff2(x, y))),
+        u8_sat(Halide::clamp(i16(spatial_pred0(x, y)), d(x, y) - diff2(x, y),
+                             d(x, y) + diff2(x, y))),
         cur(x, y));
   }
   void schedule() {
