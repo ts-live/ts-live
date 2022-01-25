@@ -42,8 +42,8 @@ struct context {
 };
 
 namespace {
-const size_t WIDTH = 1920;
-const size_t HEIGHT = 1080;
+const size_t DEFAULT_WIDTH = 1920;
+const size_t DEFAULT_HEIGHT = 1080;
 
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 
@@ -412,6 +412,17 @@ void decoderThread() {
 
       // 巻き戻す
       // inputBufferReadIndex = 0;
+    }
+  }
+
+  // WindowSize確認＆リサイズ
+  {
+    int ww, wh;
+    SDL_GetWindowSize(ctx.window, &ww, &wh);
+    if (ww != videoStream->codecpar->width ||
+        wh != videoStream->codecpar->height) {
+      SDL_SetWindowSize(ctx.window, videoStream->codecpar->width,
+                        videoStream->codecpar->height);
     }
   }
 
@@ -848,16 +859,17 @@ int main() {
   ctx.dev = 0;
 
   ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
-                                SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT,
-                                SDL_WINDOW_SHOWN);
+                                SDL_WINDOWPOS_UNDEFINED, DEFAULT_WIDTH,
+                                DEFAULT_HEIGHT, SDL_WINDOW_SHOWN);
 
   ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
-  ctx.texture = SDL_CreateTexture(
-      ctx.renderer, SDL_PIXELFORMAT_IYUV,
-      SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+  ctx.texture =
+      SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
+                        SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
+                        DEFAULT_WIDTH, DEFAULT_HEIGHT);
   ctx.iteration = 0;
-  ctx.textureWidth = WIDTH;
-  ctx.textureHeight = HEIGHT;
+  ctx.textureWidth = DEFAULT_WIDTH;
+  ctx.textureHeight = DEFAULT_HEIGHT;
 
   auto now = std::chrono::system_clock::now();
 
