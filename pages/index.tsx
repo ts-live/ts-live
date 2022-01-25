@@ -571,6 +571,7 @@ const Page: NextPage = () => {
             transform: translate(-50%, -50%);
             max-width: 100%;
             max-height: 100%;
+            aspect-ratio: 16 / 9;
           `}
           id='video'
           tabIndex={-1}
