@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(ts-wasm LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 #add_compile_options(-matomics -mbulk-memory -std=c++17)
 
 include(FetchContent)
@@ -22,7 +23,8 @@ FetchContent_Declare(
 set(SDL_THREADS ON)
 set(BENCHMARK_ENABLE_TESTING OFF)
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
-set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128")
+set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
+set(EXTRA_CFLAGS "-Wno-error=declaration-after-statement")
 FetchContent_MakeAvailable(fmt spdlog)
 FetchContent_GetProperties(SDL2)
 if(NOT SDL2_POPULATED)
