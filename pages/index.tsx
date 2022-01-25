@@ -35,6 +35,7 @@ declare interface WasmModule extends EmscriptenModule {
   setStatsCallback(
     callback: ((statsDataList: Array<StatsData>) => void) | null
   ): void
+  playFile(url: string): void
   setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
@@ -58,6 +59,11 @@ declare interface StatsData {
   InputBufferSize: number
 }
 
+declare interface EpgRecordedFile {
+  id: number
+  filename: string
+}
+
 const Page: NextPage = () => {
   const [drawer, setDrawer] = useState<boolean>(true)
   const [touched, setTouched] = useState<boolean>(false)
@@ -72,6 +78,19 @@ const Page: NextPage = () => {
     'mirakurunActiveService',
     undefined
   )
+
+  const [epgStationServer, setEpgStationServer] = useLocalStorage<string>(
+    'tsplayerEpgStationServer',
+    undefined
+  )
+  const [epgStationOk, setEpgStationOk] = useState<boolean>(false)
+  const [epgStationVersion, setEpgStationVersion] = useState<string>('unknown')
+  const [epgRecordedFiles, setEpgRecordedFiles] = useState<
+    Array<EpgRecordedFile>
+  >()
+  const [activeRecordedFileId, setActiveRecordedFileId] = useState<number>()
+  const [playMode, setPlayMode] = useState<string>('live')
+
   const [doDeinterlace, setDoDeinterlace] = useLocalStorage<boolean>(
     'tsplayerDoDeinterlace',
     false
@@ -143,6 +162,47 @@ const Page: NextPage = () => {
   }, [mirakurunOk, mirakurunServer])
 
   useEffect(() => {
+    fetch(`${epgStationServer}/api/version`)
+      .then(response => {
+        if (response.ok && response.body !== null) {
+          return response.json().then(({ version }) => {
+            setEpgStationOk(true)
+            setEpgStationVersion(version)
+          })
+        }
+      })
+      .catch(e => {
+        console.log(e)
+        setEpgStationOk(false)
+      })
+  }, [epgStationServer])
+
+  useEffect(() => {
+    fetch(
+      `${epgStationServer}/api/recorded?isHalfWidth=false&offset=0&limit=30`
+    )
+      .then(response => {
+        if (response.ok && response.body !== null) {
+          return response.json().then(ret => {
+            const recordedFileList: Array<EpgRecordedFile> = []
+            ret.records?.forEach(v => {
+              v.videoFiles.forEach(r => {
+                if (r.type === 'ts') {
+                  recordedFileList.push({ filename: v.name, id: r.id })
+                }
+              })
+            })
+            setEpgRecordedFiles(recordedFileList)
+          })
+        }
+      })
+      .catch(e => {
+        console.log(e)
+        setEpgRecordedFiles([])
+      })
+  }, [epgStationServer, epgStationOk])
+
+  useEffect(() => {
     if (doDeinterlace === undefined) {
       setDoDeinterlace(false)
       return
@@ -176,46 +236,62 @@ const Page: NextPage = () => {
     }
 
     // 再生スタート
-    const ac = new AbortController()
-    setStopFunc(() => () => {
-      console.log('abort fetch')
-      ac.abort()
-      Module.reset()
-    })
-    const url = `${mirakurunServer}/api/services/${activeService}/stream`
-    fetch(url, {
-      signal: ac.signal,
-      headers: { 'X-Mirakurun-Priority': '0' }
-    })
-      .then(async response => {
-        if (!response.body) {
-          console.error('response body is not supplied.')
-          return
-        }
-        const reader = response.body.getReader()
-        let ret = await reader.read()
-        while (!ret.done) {
-          if (ret.value) {
-            try {
-              const buffer = Module.getNextInputBuffer(ret.value.length)
-              buffer.set(ret.value)
-              // console.debug('calling enqueueData', chunk.length)
-              Module.commitInputData(ret.value.length)
-              // console.debug('enqueData done.')
-            } catch (ex) {
-              if (typeof ex === 'number') {
-                console.error(Module.getExceptionMsg(ex))
-                throw ex
+    if (playMode === 'live') {
+      const ac = new AbortController()
+      setStopFunc(() => () => {
+        console.log('abort fetch')
+        ac.abort()
+        Module.reset()
+      })
+      const url = `${mirakurunServer}/api/services/${activeService}/stream`
+      fetch(url, {
+        signal: ac.signal,
+        headers: { 'X-Mirakurun-Priority': '0' }
+      })
+        .then(async response => {
+          if (!response.body) {
+            console.error('response body is not supplied.')
+            return
+          }
+          const reader = response.body.getReader()
+          let ret = await reader.read()
+          while (!ret.done) {
+            if (ret.value) {
+              try {
+                const buffer = Module.getNextInputBuffer(ret.value.length)
+                buffer.set(ret.value)
+                // console.debug('calling enqueueData', chunk.length)
+                Module.commitInputData(ret.value.length)
+                // console.debug('enqueData done.')
+              } catch (ex) {
+                if (typeof ex === 'number') {
+                  console.error(Module.getExceptionMsg(ex))
+                  throw ex
+                }
               }
             }
+            ret = await reader.read()
           }
-          ret = await reader.read()
-        }
+        })
+        .catch(ex => {
+          console.log('fetch aborted ex:', ex)
+        })
+    } else if (playMode === 'file') {
+      setStopFunc(() => () => {
+        Module.reset()
       })
-      .catch(ex => {
-        console.log('fetch aborted ex:', ex)
-      })
-  }, [touched, mirakurunOk, mirakurunServer, activeService])
+      const url = `${epgStationServer}/api/videos/${activeRecordedFileId}`
+      Module.playFile(url)
+    }
+  }, [
+    touched,
+    mirakurunOk,
+    mirakurunServer,
+    activeService,
+    epgStationServer,
+    activeRecordedFileId,
+    playMode
+  ])
 
   const getServicesOptions = useCallback(() => {
     return tvServices.map((service, idx) => {
@@ -226,6 +302,16 @@ const Page: NextPage = () => {
       )
     })
   }, [tvServices])
+
+  const getProgramFilesOptions = useCallback(() => {
+    return epgRecordedFiles?.map(prog => {
+      return (
+        <MenuItem key={prog.id} value={prog.id}>
+          {prog.filename}
+        </MenuItem>
+      )
+    })
+  }, [epgRecordedFiles, activeRecordedFileId])
 
   return (
     <Box
@@ -341,6 +427,92 @@ const Page: NextPage = () => {
           >
             Active Service: {activeService}
           </div>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            <FormGroup>
+              <TextField
+                label='EPGStation Server'
+                placeholder='http://epgstation:8888'
+                css={css`
+                  width: 100%;
+                `}
+                onChange={ev => {
+                  setEpgStationServer(ev.target.value)
+                }}
+                value={epgStationServer}
+              ></TextField>
+            </FormGroup>
+          </div>
+          <div
+            css={css`
+              margin-top: 16px;
+            `}
+          >
+            EPGStation:{' '}
+            {epgStationOk ? `OK (version: ${epgStationVersion})` : 'NG'}
+          </div>
+          <FormControl
+            fullWidth
+            css={css`
+              margin-top: 24px;
+              width: 100%;
+            `}
+          >
+            <InputLabel id='program-files-label'>録画ファイル</InputLabel>
+            <Select
+              css={css`
+                width: 100%;
+              `}
+              label='ProgramFiles'
+              labelId='program-files-label'
+              defaultValue={
+                activeRecordedFileId !== undefined ? activeRecordedFileId : ''
+              }
+              onChange={ev => {
+                if (
+                  ev.target.value !== null &&
+                  typeof ev.target.value === 'number'
+                ) {
+                  setActiveRecordedFileId(ev.target.value)
+                }
+              }}
+            >
+              {getProgramFilesOptions()}
+            </Select>
+          </FormControl>
+          <FormControl
+            fullWidth
+            css={css`
+              margin-top: 24px;
+              width: 100%;
+            `}
+          >
+            <InputLabel id='playmode-label'>再生モード</InputLabel>
+            <Select
+              css={css`
+                width: 100%;
+              `}
+              label='再生モード'
+              labelId='playmode-label'
+              defaultValue={playMode}
+              onChange={ev => {
+                if (
+                  ev.target.value !== null &&
+                  typeof ev.target.value === 'string'
+                ) {
+                  setPlayMode(ev.target.value)
+                }
+              }}
+            >
+              <MenuItem value='live'>ライブ視聴</MenuItem>
+              {activeRecordedFileId !== undefined && (
+                <MenuItem value='file'>ファイル再生</MenuItem>
+              )}
+            </Select>
+          </FormControl>
           <div
             css={css`
               margin-top: 16px;
