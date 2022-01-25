@@ -106,6 +106,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   "SHELL:-s USE_PTHREADS=1"
   # "SHELL:-s PROXY_TO_PTHREAD=1"
   "SHELL:-s USE_SDL=2"
+  "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"
   "SHELL:-s ENVIRONMENT=web,worker"
   # "SHELL:-s EXPORTED_FUNCTIONS='[\"_main\"]'"

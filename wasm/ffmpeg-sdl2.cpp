@@ -6,6 +6,7 @@
 #include <deque>
 #include <emscripten/bind.h>
 #include <emscripten/emscripten.h>
+#include <emscripten/fetch.h>
 #include <emscripten/val.h>
 #include <fmt/format.h>
 #include <mutex>
@@ -68,7 +69,11 @@ AVStream *captionStream = nullptr;
 
 int64_t initPts = -1;
 
-bool reseted = false;
+std::string playFileUrl;
+std::thread downloaderThread;
+
+bool resetedDecoder = false;
+bool resetedDownloader = false;
 
 bool doDeinterlace = false;
 
@@ -141,9 +146,74 @@ void commitInputData(size_t nextSize) {
   waitCv.notify_all();
 }
 
+const size_t donwloadRangeSize = 2 * 1024 * 1024;
+size_t downloadCount = 0;
+
+void downloadNextRange() {
+  emscripten_fetch_attr_t attr;
+  emscripten_fetch_attr_init(&attr);
+  strcpy(attr.requestMethod, "GET");
+  attr.attributes =
+      EMSCRIPTEN_FETCH_LOAD_TO_MEMORY | EMSCRIPTEN_FETCH_SYNCHRONOUS;
+  std::string range = fmt::format("bytes={}-{}", downloadCount,
+                                  downloadCount + donwloadRangeSize - 1);
+  const char *headers[] = {"Range", range.c_str(), NULL};
+  attr.requestHeaders = headers;
+
+  spdlog::debug("request {} Range: {}", playFileUrl, range);
+  emscripten_fetch_t *fetch = emscripten_fetch(&attr, playFileUrl.c_str());
+  if (fetch->status == 206) {
+    spdlog::debug("fetch success size: {}", fetch->numBytes);
+    {
+      std::lock_guard<std::mutex> lock(inputBufferMtx);
+      if (inputBufferWriteIndex + fetch->numBytes >= MAX_INPUT_BUFFER) {
+        size_t remainSize = inputBufferWriteIndex - inputBufferReadIndex;
+        memcpy(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
+        inputBufferReadIndex = 0;
+        inputBufferWriteIndex = remainSize;
+      }
+      memcpy(&inputBuffer[inputBufferWriteIndex], &fetch->data[0],
+             fetch->numBytes);
+      inputBufferWriteIndex += fetch->numBytes;
+      downloadCount += fetch->numBytes;
+      waitCv.notify_all();
+    }
+  } else {
+    spdlog::error("fetch failed URL: {} status code: {}", playFileUrl,
+                  fetch->status);
+  }
+  emscripten_fetch_close(fetch);
+}
+
+void downloaderThraedFunc() {
+  resetedDownloader = false;
+  while (!resetedDownloader) {
+    size_t remainSize;
+    {
+      std::lock_guard<std::mutex> lock(inputBufferMtx);
+      remainSize = inputBufferWriteIndex - inputBufferReadIndex;
+    }
+    if (remainSize < donwloadRangeSize / 2) {
+      downloadNextRange();
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+  }
+}
+
 // reset
 void reset() {
-  reseted = true;
+  resetedDecoder = true;
+  resetedDownloader = true;
+  downloadCount = 0;
+  playFileUrl = std::string("");
+
+  spdlog::info("downloaderThread joinable: {}", downloaderThread.joinable());
+  if (downloaderThread.joinable()) {
+    spdlog::info("join to downloader thread");
+    downloaderThread.join();
+    spdlog::info("done.");
+  }
   {
     std::lock_guard<std::mutex> lock(inputBufferMtx);
     inputBufferReadIndex = 0;
@@ -171,6 +241,12 @@ void reset() {
 
   // SDL Audio
   SDL_ClearQueuedAudio(ctx.dev);
+}
+
+void playFile(std::string url) {
+  spdlog::info("playFile: {}", url);
+  playFileUrl = url;
+  downloaderThread = std::thread([]() { downloaderThraedFunc(); });
 }
 
 // decoder
@@ -417,7 +493,11 @@ void decoderThread() {
   avfilter_inout_free(&outputs);
 
   // decode phase
-  while (!reseted) {
+  while (!resetedDecoder) {
+    if (videoFrameQueue.size() > 240) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(30));
+      continue;
+    }
     // decode frames
     if (frame == nullptr) {
       frame = av_frame_alloc();
@@ -777,7 +857,7 @@ int main() {
   spdlog::info("Starting decoder thread.");
   std::thread th([]() {
     while (true) {
-      reseted = false;
+      resetedDecoder = false;
       decoderThread();
     }
   });
@@ -800,6 +880,7 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("showVersionInfo", &showVersionInfo);
   emscripten::function("setCaptionCallback", &setCaptionCallback);
   emscripten::function("setStatsCallback", &setStatsCallback);
+  emscripten::function("playFile", &playFile);
   emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
