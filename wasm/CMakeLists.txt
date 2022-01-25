@@ -94,12 +94,12 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp)
+add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c)
 # set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
 add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
 target_compile_features(ffmpeg-sdl2 PRIVATE cxx_std_20)
-target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include)
+target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
 target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
 target_link_options(ffmpeg-sdl2 PRIVATE
   "-Wno-pthreads-mem-growth"
