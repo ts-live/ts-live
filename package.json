@@ -6,7 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "cmake:config": "mkdir -p wasm/build && cd wasm/build && emcmake cmake -DCMAKE_BUILD_TYPE=Release ..",
+    "cmake:config": "mkdir -p wasm/build && cd wasm/build && emcmake cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..",
     "cmake:build": "cmake --build wasm/build --parallel 4 && cmake --install wasm/build --prefix public/wasm",
     "cmake:build-cf": "cmake --build wasm/build --clean-first --parallel 8 && cmake --install wasm/build --prefix public/wasm"
   },
