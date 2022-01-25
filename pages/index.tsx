@@ -185,8 +185,8 @@ const Page: NextPage = () => {
         if (response.ok && response.body !== null) {
           return response.json().then(ret => {
             const recordedFileList: Array<EpgRecordedFile> = []
-            ret.records?.forEach(v => {
-              v.videoFiles.forEach(r => {
+            ret.records?.forEach((v: any) => {
+              v.videoFiles.forEach((r: any) => {
                 if (r.type === 'ts') {
                   recordedFileList.push({ filename: v.name, id: r.id })
                 }
