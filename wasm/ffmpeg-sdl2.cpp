@@ -810,7 +810,7 @@ void mainloop(void *arg) {
       want.freq = frame->sample_rate;
       want.format = AUDIO_F32; // TODO
       want.channels = frame->channels;
-      want.samples = 4096;
+      want.samples = 16 * 1024;
 
       SDL_ClearError();
       spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
