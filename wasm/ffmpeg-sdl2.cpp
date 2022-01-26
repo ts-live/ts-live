@@ -46,6 +46,7 @@ const size_t DEFAULT_WIDTH = 1920;
 const size_t DEFAULT_HEIGHT = 1080;
 
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
+const size_t PROBE_SIZE = 1024 * 1024;
 
 std::uint8_t inputBuffer[MAX_INPUT_BUFFER];
 std::mutex inputBufferMtx;
@@ -84,6 +85,22 @@ std::vector<emscripten::val> statsBuffer;
 emscripten::val captionCallback = emscripten::val::null();
 emscripten::val statsCallback = emscripten::val::null();
 } // namespace
+
+// clang-format off
+EM_JS(void, set_style, (int width), {
+  const scaleX = 1920 / width;
+  const transform = Module.canvas.style.transform;
+  // Module.canvas.style.aspectRatio = `${width} / 1080`;
+  if (transform.indexOf('scaleX') < 0) {
+    const newTransform = `${transform} scaleX(${1920 / width})`;
+    Module.canvas.style.transform = newTransform;
+  } else {
+    const re = new RegExp('scaleX.([-0-9.]+).');
+    const newTransform = transform.replace(/scaleX.[-0-9.]+./, `scaleX(${1920 / width})`);
+    Module.canvas.style.transform = newTransform;
+  }
+});
+// clang-format on
 
 // utility
 std::string getExceptionMsg(intptr_t ptr) {
@@ -288,7 +305,7 @@ void decoderThread() {
         return;
       }
       spdlog::debug("open success");
-      formatContext->probesize = requireBufSize;
+      formatContext->probesize = PROBE_SIZE;
     }
 
     if (videoStream == nullptr || audioStream == nullptr) {
@@ -415,17 +432,6 @@ void decoderThread() {
 
       // 巻き戻す
       // inputBufferReadIndex = 0;
-    }
-  }
-
-  // WindowSize確認＆リサイズ
-  {
-    int ww, wh;
-    SDL_GetWindowSize(ctx.window, &ww, &wh);
-    if (ww != videoStream->codecpar->width ||
-        wh != videoStream->codecpar->height) {
-      SDL_SetWindowSize(ctx.window, videoStream->codecpar->width,
-                        videoStream->codecpar->height);
     }
   }
 
@@ -702,6 +708,18 @@ void mainloop(void *arg) {
                   currentFrame->pts, av_q2d(currentFrame->time_base),
                   audioFrameQueue.size());
 
+    // WindowSize確認＆リサイズ
+    {
+      int ww, wh;
+      SDL_GetWindowSize(ctx.window, &ww, &wh);
+      if (ww != videoStream->codecpar->width ||
+          wh != videoStream->codecpar->height) {
+        SDL_SetWindowSize(ctx.window, videoStream->codecpar->width,
+                          videoStream->codecpar->height);
+        set_style(videoStream->codecpar->width);
+      }
+    }
+
     // Textureとサイズ合わせ
     if (currentFrame->width != ctx.textureWidth ||
         currentFrame->height != ctx.textureHeight) {
@@ -864,6 +882,8 @@ int main() {
   ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
                                 SDL_WINDOWPOS_UNDEFINED, DEFAULT_WIDTH,
                                 DEFAULT_HEIGHT, SDL_WINDOW_SHOWN);
+
+  set_style(DEFAULT_WIDTH);
 
   ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
   ctx.texture =

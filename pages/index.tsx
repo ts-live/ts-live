@@ -334,6 +334,7 @@ const Page: NextPage = () => {
               doNotCaptureKeyboard: true,
               onRuntimeInitialized: function(){Module.setLogLevelInfo();}
             };
+            console.log('Module setup OK');
         `}
       </Script>
       <Script
@@ -568,10 +569,8 @@ const Page: NextPage = () => {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -50%);
             max-width: 100%;
             max-height: 100%;
-            aspect-ratio: 16 / 9;
           `}
           id='video'
           tabIndex={-1}
@@ -579,6 +578,10 @@ const Page: NextPage = () => {
           height={1080}
           onClick={() => setDrawer(true)}
           onContextMenu={ev => ev.preventDefault()}
+          // transformはWasmが書き換えるので要素のタグに直接書くこと
+          style={{
+            transform: 'translate(-50%, -50%);'
+          }}
         ></canvas>
         <div
           css={css`
