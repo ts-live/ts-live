@@ -337,15 +337,18 @@ void decoderThread() {
         spdlog::error("No audio stream ...");
         return;
       }
-      spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{}",
+      spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} delay:{}",
                    videoStream->index, videoStream->codecpar->codec_id,
                    avcodec_get_name(videoStream->codecpar->codec_id),
-                   videoStream->codecpar->width, videoStream->codecpar->height);
+                   videoStream->codecpar->width, videoStream->codecpar->height,
+                   videoStream->codecpar->video_delay);
 
-      spdlog::info("Found audio stream index:{} codecID:{}={} channels:{}",
+      spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
+                   "sample_rate:{}",
                    audioStream->index, audioStream->codecpar->codec_id,
                    avcodec_get_name(audioStream->codecpar->codec_id),
-                   audioStream->codecpar->channels);
+                   audioStream->codecpar->channels,
+                   audioStream->codecpar->sample_rate);
     }
 
     // find decoder
