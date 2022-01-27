@@ -127,7 +127,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp)
+add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp audio/audioworklet.cpp)
 # set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
 add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
@@ -150,10 +150,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   # "SHELL:-s EXPORTED_RUNTIME_METHODS='[\"ccall\"]'"
   "SHELL:--bind"
   "SHELL:-s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0"
+  "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js@/processor.js"
   )
 install(TARGETS ffmpeg-sdl2 DESTINATION .)
 install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.worker.js DESTINATION .)
-# file(GLOB wasm-files ${CMAKE_CURRENTBINARY_DIR}/ffmpeg-sdl2*)
-# file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
-# file(COPY ${wasm-files} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
-
