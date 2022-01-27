@@ -120,13 +120,14 @@ const Page: NextPage = () => {
 
   const captionCallback = useCallback(
     (pts: number, ptsTime: number, captionData: Uint8Array) => {
+      const start = performance.now()
       const data = captionData.slice()
       const canvas = captionCanvasRef.current
       if (!canvas) return
       const context = canvas.getContext('2d')
       if (!context) return
       if (!canvasProviderState.value) {
-        console.log('canvasProvider not loaded')
+        console.log('canvasProvider not loaded', canvasProviderState.error)
         return
       }
 
@@ -155,7 +156,8 @@ const Page: NextPage = () => {
           gaijiFont: font,
           drcsReplacement: true
         })
-        console.log('result', result)
+        const end = performance.now()
+        console.log('result', result, end - start)
         setCurrentSubtitle(data)
         if (estimate.endTime === Number.POSITIVE_INFINITY) return
         setTimeout(() => {
