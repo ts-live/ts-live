@@ -1,6 +1,7 @@
 class AudioFeederProcessor extends AudioWorkletProcessor {
   bufferedSamples = 0
   currentBufferReadSize = 0
+  processCallCount = 0
   buffers0 = new Array(0)
   buffers1 = new Array(0)
   constructor (...args) {
@@ -81,6 +82,9 @@ class AudioFeederProcessor extends AudioWorkletProcessor {
         this.buffers0.shift()
         this.buffers1.shift()
       }
+    }
+    if (this.processCallCount++ % 20 == 0) {
+      this.port.postMessage(this.bufferedSamples)
     }
     return true
   }

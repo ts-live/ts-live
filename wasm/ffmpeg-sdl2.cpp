@@ -36,7 +36,6 @@ struct context {
   SDL_Renderer *renderer;
   SDL_Texture *texture;
   SDL_AudioDeviceID dev;
-  SDL_AudioSpec openedAudioSpec;
   size_t textureWidth;
   size_t textureHeight;
   int iteration;
@@ -524,7 +523,7 @@ void decoderThread() {
 
   // decode phase
   while (!resetedDecoder) {
-    if (videoFrameQueue.size() > 240) {
+    if (videoFrameQueue.size() > 180) {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
       continue;
     }
@@ -750,11 +749,6 @@ void mainloop(void *arg) {
     // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
     bool showFlag = estimatedAudioPlayTime > videoPtsTime;
 
-    spdlog::debug("Time@mainloop VideoPTSTime: {} AudioPTSTime: {} "
-                  "QueuedAudioSize: {} freq: {} EstimatedTime: {} showFlag: {}",
-                  videoPtsTime, audioPtsTime, SDL_GetQueuedAudioSize(ctx.dev),
-                  ctx.openedAudioSpec.freq, estimatedAudioPlayTime, showFlag);
-
     // リップシンク条件を満たしてたらVideoFrame再生
     if (showFlag) {
       {
@@ -801,60 +795,6 @@ void mainloop(void *arg) {
                     frame->nb_samples);
     }
 
-    auto &spec = ctx.openedAudioSpec;
-
-    // if (ctx.dev == 0 || spec.freq != frame->sample_rate ||
-    //     spec.channels != frame->channels) {
-    //   SDL_PauseAudioDevice(ctx.dev, 1);
-    //   SDL_ClearQueuedAudio(ctx.dev);
-    //   SDL_CloseAudioDevice(ctx.dev);
-
-    //   // オーディオデバイス再オープン
-    //   SDL_AudioSpec want;
-    //   SDL_zero(want);
-    //   want.freq = frame->sample_rate;
-    //   want.format = AUDIO_F32; // TODO
-    //   want.channels = frame->channels;
-    //   want.samples = 4096;
-
-    //   SDL_ClearError();
-    //   spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
-    //   ctx.dev = SDL_OpenAudioDevice(NULL, 0, &want, &ctx.openedAudioSpec, 0);
-    //   spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
-    //   spdlog::info("frame freq:{} channels:{}", frame->sample_rate,
-    //                frame->channels);
-    //   spdlog::info("want: freq:{} format:{} channels:{}", want.freq,
-    //                want.format, want.channels);
-
-    //   SDL_PauseAudioDevice(ctx.dev, 0);
-    // }
-
-    // if (frame->channels > 1) {
-    //   // 詰め直し
-    //   std::vector<float> buf(frame->channels * frame->nb_samples);
-    //   for (int i = 0; i < frame->nb_samples; i++) {
-    //     for (int ch = 0; ch < frame->channels; ch++) {
-    //       buf[frame->channels * i + ch] =
-    //           reinterpret_cast<float *>(frame->buf[ch]->data)[i];
-    //     }
-    //   }
-    //   // int ret =
-    //   //     SDL_QueueAudio(ctx.dev, &buf[0],
-    //   //                    sizeof(float) * frame->nb_samples *
-    //   //                    frame->channels);
-    //   // if (ret < 0) {
-    //   //   spdlog::info("SDL_QueueAudio: {}: {}", ret, SDL_GetError());
-    //   // }
-    // } else {
-    //   // int ret = SDL_QueueAudio(ctx.dev, frame->buf[0]->data,
-    //   //                          sizeof(float) * frame->nb_samples);
-    //   // if (ret < 0) {
-    //   //   spdlog::info("SDL_QueueAudio: dev:{} {}: {}
-    //   GetQueuedAudioSize:{}",
-    //   //                ctx.dev, ret, SDL_GetError(),
-    //   //                SDL_GetQueuedAudioSize(ctx.dev));
-    //   // }
-    // }
     av_frame_free(&frame);
   }
   if (!captionCallback.isNull()) {
