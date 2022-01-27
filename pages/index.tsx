@@ -351,7 +351,6 @@ const Page: NextPage = () => {
         onClose={() => {
           if (mirakurunOk) {
             setTouched(true)
-            Module.myAudio.ctx.resume()
             setDrawer(false)
           }
         }}
