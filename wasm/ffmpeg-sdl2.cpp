@@ -63,7 +63,7 @@ context ctx;
 
 // for libav
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
-std::deque<std::vector<uint8_t>> captionDataQueue;
+std::deque<std::pair<int64_t, std::vector<uint8_t>>> captionDataQueue;
 std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
 
@@ -367,6 +367,12 @@ void decoderThread() {
                    avcodec_get_name(audioStream->codecpar->codec_id),
                    audioStream->codecpar->channels,
                    audioStream->codecpar->sample_rate);
+
+      if (captionStream) {
+        spdlog::info("Found caption stream index:{} codecID:{}={}",
+                     captionStream->index, captionStream->codecpar->codec_id,
+                     avcodec_get_name(captionStream->codecpar->codec_id));
+      }
     }
 
     // find decoder
@@ -655,7 +661,10 @@ void decoderThread() {
         memcpy(&buffer[0], packet.data, packet.size);
         {
           std::lock_guard<std::mutex> lock(captionDataMtx);
-          captionDataQueue.push_back(std::move(buffer));
+          int64_t pts = packet.pts;
+          captionDataQueue.push_back(
+              std::make_pair<int64_t, std::vector<uint8_t>>(std::move(pts),
+                                                            std::move(buffer)));
         }
       }
     }
@@ -685,6 +694,8 @@ void mainloop(void *arg) {
     data.set("AudioFrameQueueSize", audioFrameQueue.size());
     data.set("AudioWorkletBufferSize", bufferedAudioSamples);
     data.set("InputBufferSize", inputBufferWriteIndex - inputBufferReadIndex);
+    data.set("CaptionDataQueueSize",
+             captionStream ? captionDataQueue.size() : 0);
     statsBuffer.push_back(std::move(data));
     if (statsBuffer.size() >= 6) {
       auto statsArray = emscripten::val::array();
@@ -799,14 +810,32 @@ void mainloop(void *arg) {
   }
   if (!captionCallback.isNull()) {
     while (captionDataQueue.size() > 0) {
-      auto buffer = captionDataQueue.front();
+      auto p = captionDataQueue.front();
+      double pts = (double)p.first;
+      auto buffer = p.second;
+      double ptsTime = pts * av_q2d(captionStream->time_base);
       {
         std::lock_guard<std::mutex> lock(captionDataMtx);
         captionDataQueue.pop_front();
       }
+
+      // AudioFrameは完全に見るだけ
+      assert(!audioFrameQueue.empty());
+      AVFrame *audioFrame = audioFrameQueue.front();
+      // VideoとAudioのPTSをクロックから時間に直す
+      // TODO: クロック一回転したときの処理
+      double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
+
+      // 上記から推定される、現在再生している音声のPTS（時間）
+      // double estimatedAudioPlayTime =
+      //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+      double estimatedAudioPlayTime =
+          audioPtsTime -
+          (double)bufferedAudioSamples / audioStream->codecpar->sample_rate;
+
       auto data = emscripten::val(
           emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
-      captionCallback(data);
+      captionCallback(pts, ptsTime - audioPtsTime, data);
     }
   }
 }

@@ -2,8 +2,8 @@
 import { css } from '@emotion/react'
 import { NextPage } from 'next'
 import Script from 'next/script'
-import { useCallback, useEffect, useState } from 'react'
-import { useLocalStorage } from 'react-use'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAsync, useLocalStorage } from 'react-use'
 import {
   Box,
   Checkbox,
@@ -31,7 +31,9 @@ declare interface WasmModule extends EmscriptenModule {
   setLogLevelDebug(): void
   setLogLevelInfo(): void
   showVersionInfo(): void
-  setCaptionCallback(callback: (captionData: Uint8Array) => void): void
+  setCaptionCallback(
+    callback: (pts: number, ptsTime: number, captionData: Uint8Array) => void
+  ): void
   setStatsCallback(
     callback: ((statsDataList: Array<StatsData>) => void) | null
   ): void
@@ -106,6 +108,65 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
+  const captionCanvasRef = useRef<HTMLCanvasElement>(null)
+  const [currentSubtitle, setCurrentSubtitle] = useState<Uint8Array>()
+
+  const canvasProviderState = useAsync(async () => {
+    const CanvasProvider = await import('aribb24.js').then(
+      mod => mod.CanvasProvider
+    )
+    return CanvasProvider
+  })
+
+  const captionCallback = useCallback(
+    (pts: number, ptsTime: number, captionData: Uint8Array) => {
+      const data = captionData.slice()
+      const canvas = captionCanvasRef.current
+      if (!canvas) return
+      const context = canvas.getContext('2d')
+      if (!context) return
+      if (!canvasProviderState.value) {
+        console.log('canvasProvider not loaded')
+        return
+      }
+
+      const CanvasProvider = canvasProviderState.value
+
+      // if (!aribSubtitleData) {
+      //   context.clearRect(0, 0, canvas.width, canvas.height)
+      //   setDisplayingAribSubtitleData(null)
+      //   return
+      // }
+
+      const provider = new CanvasProvider(data, ptsTime)
+      const estimate = provider.render()
+      if (!estimate) return
+      console.log('estimate', estimate, pts, ptsTime, data)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      // const font = setting.font || SUBTITLE_DEFAULT_FONT
+      const font = `"Rounded M+ 1m for ARIB"`
+      const timer = setTimeout(() => {
+        const result = provider.render({
+          canvas,
+          useStroke: true,
+          keepAspectRatio: true,
+          normalFont: font,
+          gaijiFont: font,
+          drcsReplacement: true
+        })
+        console.log('result', result)
+        setCurrentSubtitle(data)
+        if (estimate.endTime === Number.POSITIVE_INFINITY) return
+        setTimeout(() => {
+          if (currentSubtitle !== data) return
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+          setCurrentSubtitle(undefined)
+        }, (estimate.endTime - estimate.startTime) * 1000)
+      }, estimate.startTime * 1000)
+    },
+    []
+  )
 
   const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
     setChartData(prev => {
@@ -238,6 +299,7 @@ const Page: NextPage = () => {
     } else {
       Module.setStatsCallback(null)
     }
+    Module.setCaptionCallback(captionCallback)
 
     // 再生スタート
     if (playMode === 'live') {
@@ -331,6 +393,7 @@ const Page: NextPage = () => {
         {`
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
+              captionCanvas: (function () { return document.getElementById('caption'); })(),
               doNotCaptureKeyboard: true,
               onRuntimeInitialized: function(){
                 Module.setLogLevelInfo();
@@ -586,6 +649,21 @@ const Page: NextPage = () => {
             transform: 'translate(-50%, -50%);'
           }}
         ></canvas>
+        <canvas
+          css={css`
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            max-width: 100%;
+            max-height: 100%;
+            transform: translate(-50%, -50%);
+          `}
+          id='caption'
+          ref={captionCanvasRef}
+          width={1920}
+          height={1080}
+          onClick={() => setDrawer(true)}
+        ></canvas>
         <div
           css={css`
             display: ${showCharts ? 'flex' : 'none'};
@@ -638,6 +716,24 @@ const Page: NextPage = () => {
               dataKey='AudioFrameQueueSize'
               name='Audio Queue Size'
               stroke='#82ca9d'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='CaptionDataQueueSize'
+              name='Caption Data Size'
+              stroke='#9dca82'
               isAnimationActive={false}
               dot={false}
             />
