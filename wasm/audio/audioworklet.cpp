@@ -1,5 +1,7 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/val.h>
+#include <fstream>
+#include <sstream>
 
 int bufferedAudioSamples = 0;
 
@@ -27,12 +29,23 @@ void feedAudioData(float *buffer0, float *buffer1, int samples) {
   // clang-format on
 }
 
+std::string slurp(const char *filename) {
+  std::ifstream in;
+  in.open(filename, std::ifstream::in | std::ifstream::binary);
+  std::stringstream sstr;
+  sstr << in.rdbuf();
+  in.close();
+  return sstr.str();
+}
+
 void startAudioWorklet() {
+  std::string scriptSource = slurp("/processor.js");
+
   // clang-format off
   EM_ASM({
     (async function(){
       const audioContext = new AudioContext();
-      await audioContext.audioWorklet.addModule('/wasm/processor.js');
+      await audioContext.audioWorklet.addModule(`data:text/javascript,${encodeURI(UTF8ToString($0))}`);
       const audioNode = new AudioWorkletNode(
           audioContext, 'audio-feeder-processor',
           {numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2]});
@@ -42,6 +55,6 @@ void startAudioWorklet() {
       audioContext.resume();
       audioNode.port.onmessage = e => {Module.setBufferedAudioSamples(e.data)};
     })();
-  });
+  }, scriptSource.c_str());
   // clang-format on
 }

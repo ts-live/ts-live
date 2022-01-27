@@ -150,6 +150,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   # "SHELL:-s EXPORTED_RUNTIME_METHODS='[\"ccall\"]'"
   "SHELL:--bind"
   "SHELL:-s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0"
+  "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js@/processor.js"
   )
 install(TARGETS ffmpeg-sdl2 DESTINATION .)
 install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.worker.js DESTINATION .)
@@ -164,4 +165,4 @@ install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sd
 #   ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.ts
 # )
 
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js DESTINATION .)
+# install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js DESTINATION .)
