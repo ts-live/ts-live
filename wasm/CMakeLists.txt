@@ -154,15 +154,3 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   )
 install(TARGETS ffmpeg-sdl2 DESTINATION .)
 install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.worker.js DESTINATION .)
-# file(GLOB wasm-files ${CMAKE_CURRENTBINARY_DIR}/ffmpeg-sdl2*)
-# file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
-# file(COPY ${wasm-files} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
-
-# add_custom_target(processor.js
-#   ALL
-#   COMMAND npx tsc
-#   --outDir ${CMAKE_CURRENT_BINARY_DIR}
-#   ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.ts
-# )
-
-# install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js DESTINATION .)
