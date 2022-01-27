@@ -332,9 +332,12 @@ const Page: NextPage = () => {
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
               doNotCaptureKeyboard: true,
-              onRuntimeInitialized: function(){Module.setLogLevelInfo();}
+              onRuntimeInitialized: function(){
+                Module.setLogLevelInfo();
+                console.log('Module setup OK');
+              }
             };
-            console.log('Module setup OK');
+
         `}
       </Script>
       <Script
@@ -348,6 +351,7 @@ const Page: NextPage = () => {
         onClose={() => {
           if (mirakurunOk) {
             setTouched(true)
+            Module.myAudio.ctx.resume()
             setDrawer(false)
           }
         }}
@@ -650,8 +654,8 @@ const Page: NextPage = () => {
             <Legend />
             <Line
               type='linear'
-              dataKey='SDLQueuedAudioSize'
-              name='SDL Audio Queue Size'
+              dataKey='AudioWorkletBufferSize'
+              name='AudioWorklet Buffer Size'
               stroke='#9d82ca'
               isAnimationActive={false}
               dot={false}

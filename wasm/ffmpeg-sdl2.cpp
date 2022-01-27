@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "audio/audioworklet.hpp"
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/avfilter.h>
@@ -682,9 +684,7 @@ void mainloop(void *arg) {
     data.set("time", duration.count() / 1000.0);
     data.set("VideoFrameQueueSize", videoFrameQueue.size());
     data.set("AudioFrameQueueSize", audioFrameQueue.size());
-    data.set("SDLQueuedAudioSize", SDL_GetQueuedAudioSize(ctx.dev) /
-                                       audioStream->codecpar->channels *
-                                       sizeof(float));
+    data.set("AudioWorkletBufferSize", bufferedAudioSamples);
     data.set("InputBufferSize", inputBufferWriteIndex - inputBufferReadIndex);
     statsBuffer.push_back(std::move(data));
     if (statsBuffer.size() >= 6) {
@@ -740,17 +740,12 @@ void mainloop(void *arg) {
     double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
     double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
 
-    // SDL_GetQueuedAudioSize:
-    // AudioQueueに溜まってる分（バイト数なので型サイズとチャンネル数で割る）
-    // ctx.openedAudioSpec.samples: SDLの中のバッファサイズ
-    // 本当は更に+でデバイスのバッファサイズがあるはず
-    double queuedSize = static_cast<double>(SDL_GetQueuedAudioSize(ctx.dev)) /
-                            (sizeof(float) * ctx.openedAudioSpec.channels) +
-                        ctx.openedAudioSpec.samples;
-
     // 上記から推定される、現在再生している音声のPTS（時間）
+    // double estimatedAudioPlayTime =
+    //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
     double estimatedAudioPlayTime =
-        audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+        audioPtsTime -
+        (double)bufferedAudioSamples / audioStream->codecpar->sample_rate;
 
     // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
     bool showFlag = estimatedAudioPlayTime > videoPtsTime;
@@ -796,58 +791,70 @@ void mainloop(void *arg) {
     spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{}",
                   frame->pts, av_q2d(frame->time_base), frame->nb_samples);
 
+    if (frame->channels == 2) {
+      feedAudioData(reinterpret_cast<float *>(frame->buf[0]->data),
+                    reinterpret_cast<float *>(frame->buf[1]->data),
+                    frame->nb_samples);
+    } else {
+      feedAudioData(reinterpret_cast<float *>(frame->buf[0]->data),
+                    reinterpret_cast<float *>(frame->buf[0]->data),
+                    frame->nb_samples);
+    }
+
     auto &spec = ctx.openedAudioSpec;
 
-    if (ctx.dev == 0 || spec.freq != frame->sample_rate ||
-        spec.channels != frame->channels) {
-      SDL_PauseAudioDevice(ctx.dev, 1);
-      SDL_ClearQueuedAudio(ctx.dev);
-      SDL_CloseAudioDevice(ctx.dev);
+    // if (ctx.dev == 0 || spec.freq != frame->sample_rate ||
+    //     spec.channels != frame->channels) {
+    //   SDL_PauseAudioDevice(ctx.dev, 1);
+    //   SDL_ClearQueuedAudio(ctx.dev);
+    //   SDL_CloseAudioDevice(ctx.dev);
 
-      // オーディオデバイス再オープン
-      SDL_AudioSpec want;
-      SDL_zero(want);
-      want.freq = frame->sample_rate;
-      want.format = AUDIO_F32; // TODO
-      want.channels = frame->channels;
-      want.samples = 4096;
+    //   // オーディオデバイス再オープン
+    //   SDL_AudioSpec want;
+    //   SDL_zero(want);
+    //   want.freq = frame->sample_rate;
+    //   want.format = AUDIO_F32; // TODO
+    //   want.channels = frame->channels;
+    //   want.samples = 4096;
 
-      SDL_ClearError();
-      spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
-      ctx.dev = SDL_OpenAudioDevice(NULL, 0, &want, &ctx.openedAudioSpec, 0);
-      spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
-      spdlog::info("frame freq:{} channels:{}", frame->sample_rate,
-                   frame->channels);
-      spdlog::info("want: freq:{} format:{} channels:{}", want.freq,
-                   want.format, want.channels);
+    //   SDL_ClearError();
+    //   spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
+    //   ctx.dev = SDL_OpenAudioDevice(NULL, 0, &want, &ctx.openedAudioSpec, 0);
+    //   spdlog::info("SDL_OpenAudioDevice dev:{} {}", ctx.dev, SDL_GetError());
+    //   spdlog::info("frame freq:{} channels:{}", frame->sample_rate,
+    //                frame->channels);
+    //   spdlog::info("want: freq:{} format:{} channels:{}", want.freq,
+    //                want.format, want.channels);
 
-      SDL_PauseAudioDevice(ctx.dev, 0);
-    }
+    //   SDL_PauseAudioDevice(ctx.dev, 0);
+    // }
 
-    if (frame->channels > 1) {
-      // 詰め直し
-      std::vector<float> buf(frame->channels * frame->nb_samples);
-      for (int i = 0; i < frame->nb_samples; i++) {
-        for (int ch = 0; ch < frame->channels; ch++) {
-          buf[frame->channels * i + ch] =
-              reinterpret_cast<float *>(frame->buf[ch]->data)[i];
-        }
-      }
-      int ret =
-          SDL_QueueAudio(ctx.dev, &buf[0],
-                         sizeof(float) * frame->nb_samples * frame->channels);
-      if (ret < 0) {
-        spdlog::info("SDL_QueueAudio: {}: {}", ret, SDL_GetError());
-      }
-    } else {
-      int ret = SDL_QueueAudio(ctx.dev, frame->buf[0]->data,
-                               sizeof(float) * frame->nb_samples);
-      if (ret < 0) {
-        spdlog::info("SDL_QueueAudio: dev:{} {}: {} GetQueuedAudioSize:{}",
-                     ctx.dev, ret, SDL_GetError(),
-                     SDL_GetQueuedAudioSize(ctx.dev));
-      }
-    }
+    // if (frame->channels > 1) {
+    //   // 詰め直し
+    //   std::vector<float> buf(frame->channels * frame->nb_samples);
+    //   for (int i = 0; i < frame->nb_samples; i++) {
+    //     for (int ch = 0; ch < frame->channels; ch++) {
+    //       buf[frame->channels * i + ch] =
+    //           reinterpret_cast<float *>(frame->buf[ch]->data)[i];
+    //     }
+    //   }
+    //   // int ret =
+    //   //     SDL_QueueAudio(ctx.dev, &buf[0],
+    //   //                    sizeof(float) * frame->nb_samples *
+    //   //                    frame->channels);
+    //   // if (ret < 0) {
+    //   //   spdlog::info("SDL_QueueAudio: {}: {}", ret, SDL_GetError());
+    //   // }
+    // } else {
+    //   // int ret = SDL_QueueAudio(ctx.dev, frame->buf[0]->data,
+    //   //                          sizeof(float) * frame->nb_samples);
+    //   // if (ret < 0) {
+    //   //   spdlog::info("SDL_QueueAudio: dev:{} {}: {}
+    //   GetQueuedAudioSize:{}",
+    //   //                ctx.dev, ret, SDL_GetError(),
+    //   //                SDL_GetQueuedAudioSize(ctx.dev));
+    //   // }
+    // }
     av_frame_free(&frame);
   }
   if (!captionCallback.isNull()) {
@@ -869,7 +876,7 @@ int main() {
   startTime = std::chrono::system_clock::now();
 
   // SDL初期化
-  SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+  SDL_Init(SDL_INIT_VIDEO);
 
   // Disable Keyboard handling
   // https://github.com/emscripten-core/emscripten/issues/3621
@@ -905,6 +912,9 @@ int main() {
     }
   });
 
+  // AudioWorklet起動
+  startAudioWorklet();
+
   // fps指定するとrAFループじゃなくタイマーになるので裏周りしても再生が続く。fps<=0だとrAFが使われるらしい。
   const int fps = 60;
   const int simulate_infinite_loop = 1;
@@ -930,4 +940,5 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("reset", &reset);
   emscripten::function("setLogLevelDebug", &setLogLevelDebug);
   emscripten::function("setLogLevelInfo", &setLogLevelInfo);
+  emscripten::function("setBufferedAudioSamples", &setBufferedAudioSamples);
 }

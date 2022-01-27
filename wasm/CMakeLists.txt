@@ -127,7 +127,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp)
+add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp audio/audioworklet.cpp)
 # set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
 add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
@@ -157,3 +157,11 @@ install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sd
 # file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
 # file(COPY ${wasm-files} DESTINATION ${CMAKE_CURRENT_SOURCE_DIR}/../public/wasm/)
 
+# add_custom_target(processor.js
+#   ALL
+#   COMMAND npx tsc
+#   --outDir ${CMAKE_CURRENT_BINARY_DIR}
+#   ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.ts
+# )
+
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js DESTINATION .)
