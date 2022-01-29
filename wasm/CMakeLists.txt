@@ -8,10 +8,6 @@ set(CMAKE_C_STANDARD 11)
 find_package(Threads)
 include(FetchContent)
 FetchContent_Declare(
-  SDL2
-  URL https://www.libsdl.org/release/SDL2-2.0.20.zip
-)
-FetchContent_Declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
   GIT_TAG v1.9.2
@@ -21,18 +17,11 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 8.0.1
 )
-set(SDL_THREADS ON)
 set(BENCHMARK_ENABLE_TESTING OFF)
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(EXTRA_CFLAGS "-Wno-error=declaration-after-statement")
 FetchContent_MakeAvailable(fmt spdlog)
-FetchContent_GetProperties(SDL2)
-if(NOT SDL2_POPULATED)
-  FetchContent_Populate(SDL2)
-  add_subdirectory(${sdl2_SOURCE_DIR} ${sdl2_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
-
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
 file(TO_NATIVE_PATH ${CMAKE_COMMAND} native_cmake_command)
@@ -133,7 +122,7 @@ add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
 target_compile_features(ffmpeg-sdl2 PRIVATE cxx_std_20)
 target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg ${CMAKE_CURRENT_BINARY_DIR}/halide_lib ${CMAKE_CURRENT_BINARY_DIR}/host_tools/_deps/halide-build/include/)
-target_link_libraries(ffmpeg-sdl2 SDL2::SDL2-static fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/halide_lib/deinterlace.a)
+target_link_libraries(ffmpeg-sdl2 fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} ${CMAKE_CURRENT_BINARY_DIR}/halide_lib/deinterlace.a)
 add_dependencies(ffmpeg-sdl2 deinterlace_wasm)
 target_link_options(ffmpeg-sdl2 PRIVATE
   "-Wno-pthreads-mem-growth"
@@ -142,7 +131,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   "SHELL:-s USE_PTHREADS=1"
   # "SHELL:-s PROXY_TO_PTHREAD=1"
   "SHELL:-s ASSERTIONS=1"
-  "SHELL:-s USE_SDL=2"
+  "SHELL:-s USE_SDL=0"
   "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"
   "SHELL:-s ENVIRONMENT=web,worker"

@@ -331,6 +331,7 @@ const Page: NextPage = () => {
         {`
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
+              canvasCtx: (function () { return document.getElementById('video').getContext('2d'); })(),
               doNotCaptureKeyboard: true,
               onRuntimeInitialized: function(){
                 Module.setLogLevelInfo();

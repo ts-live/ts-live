@@ -1,5 +1,3 @@
-#include <SDL.h>
-#include <SDL_audio.h>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -31,17 +29,6 @@ extern "C" {
 void set_yadif_filter(AVFilterContext *ctx);
 }
 
-struct context {
-  SDL_Window *window;
-  SDL_Renderer *renderer;
-  SDL_Texture *texture;
-  SDL_AudioDeviceID dev;
-  size_t textureWidth;
-  size_t textureHeight;
-  int iteration;
-  // std::chrono::system_clock::time_point fpsCounts[FPS_COUNT];
-};
-
 namespace {
 const size_t DEFAULT_WIDTH = 1920;
 const size_t DEFAULT_HEIGHT = 1080;
@@ -57,9 +44,6 @@ size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 
 std::chrono::system_clock::time_point startTime;
-
-// for SDL
-context ctx;
 
 // for libav
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
@@ -258,9 +242,6 @@ void reset() {
   videoStream = nullptr;
   audioStream = nullptr;
   captionStream = nullptr;
-
-  // SDL Audio
-  SDL_ClearQueuedAudio(ctx.dev);
 }
 
 void playFile(std::string url) {
@@ -708,28 +689,11 @@ void mainloop(void *arg) {
                   audioFrameQueue.size());
 
     // WindowSize確認＆リサイズ
-    {
-      int ww, wh;
-      SDL_GetWindowSize(ctx.window, &ww, &wh);
-      if (ww != videoStream->codecpar->width ||
-          wh != videoStream->codecpar->height) {
-        SDL_SetWindowSize(ctx.window, videoStream->codecpar->width,
-                          videoStream->codecpar->height);
-        set_style(videoStream->codecpar->width);
-      }
-    }
-
-    // Textureとサイズ合わせ
-    if (currentFrame->width != ctx.textureWidth ||
-        currentFrame->height != ctx.textureHeight) {
-      SDL_DestroyTexture(ctx.texture);
-      ctx.texture =
-          SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
-                            SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
-                            currentFrame->width, currentFrame->height);
-      ctx.textureWidth = currentFrame->width;
-      ctx.textureHeight = currentFrame->height;
-    }
+    // TODO:
+    // if (ww != videoStream->codecpar->width ||
+    //     wh != videoStream->codecpar->height) {
+    //   set_style(videoStream->codecpar->width);
+    // }
 
     // AudioFrameは完全に見るだけ
     AVFrame *audioFrame = audioFrameQueue.front();
@@ -755,22 +719,56 @@ void mainloop(void *arg) {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         videoFrameQueue.pop_front();
       }
-      int bufferSize = av_image_get_buffer_size(
-          (AVPixelFormat)currentFrame->format, currentFrame->width,
-          currentFrame->height, 1);
-      uint8_t *buf;
-      int pitch;
-      SDL_LockTexture(ctx.texture, NULL, reinterpret_cast<void **>(&buf),
-                      &pitch);
-      av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
-                              currentFrame->linesize,
-                              (AVPixelFormat)currentFrame->format,
-                              currentFrame->width, currentFrame->height, 1);
-      SDL_UnlockTexture(ctx.texture);
-      av_frame_free(&currentFrame);
+      double timestamp =
+          currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
 
-      SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
-      SDL_RenderPresent(ctx.renderer);
+      // clang-format off
+      EM_ASM({
+        if (Module.canvas.width != $0 || Module.canvas.height != $1) {
+          Module.canvas.width = $0;
+          Module.canvas.height = $1;
+          const scaleX = 1920 / $0;
+          const transform = Module.canvas.style.transform;
+          if (transform.indexOf('scaleX') < 0) {
+            const newTransform = `${transform} scaleX(${1920 / $0})`;
+            Module.canvas.style.transform = newTransform;
+          } else {
+            const re = new RegExp('scaleX.([-0-9.]+).');
+            const newTransform = transform.replace(/scaleX.[-0-9.]+./, `scaleX(${1920 / $0})`);
+            Module.canvas.style.transform = newTransform;
+          }
+        }
+      }, currentFrame->width, currentFrame->height);
+      EM_ASM({
+        const videoFrame = new VideoFrame(HEAPU8, {
+          format: "I420",
+          layout: [
+            {
+              offset: $1,
+              stride: $2
+            },
+            {
+              offset: $3,
+              stride: $4
+            },
+            {
+              offset: $5,
+              stride: $6
+            }
+          ],
+          codedWidth: Module.canvas.width,
+          codedHeight: Module.canvas.height,
+          timestamp: $0
+        });
+        Module.canvasCtx.drawImage(videoFrame, 0, 0);
+        videoFrame.close();
+      }, timestamp,
+        currentFrame->data[0], currentFrame->linesize[0],
+        currentFrame->data[1], currentFrame->linesize[1],
+        currentFrame->data[2], currentFrame->linesize[2]);
+      // clang-format on
+
+      av_frame_free(&currentFrame);
     }
   }
 
@@ -815,31 +813,7 @@ int main() {
   spdlog::info("Wasm main() started.");
   startTime = std::chrono::system_clock::now();
 
-  // SDL初期化
-  SDL_Init(SDL_INIT_VIDEO);
-
-  // Disable Keyboard handling
-  // https://github.com/emscripten-core/emscripten/issues/3621
-  SDL_EventState(SDL_TEXTINPUT, SDL_DISABLE);
-  SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
-  SDL_EventState(SDL_KEYUP, SDL_DISABLE);
-
-  ctx.dev = 0;
-
-  ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
-                                SDL_WINDOWPOS_UNDEFINED, DEFAULT_WIDTH,
-                                DEFAULT_HEIGHT, SDL_WINDOW_SHOWN);
-
   set_style(DEFAULT_WIDTH);
-
-  ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
-  ctx.texture =
-      SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
-                        SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
-                        DEFAULT_WIDTH, DEFAULT_HEIGHT);
-  ctx.iteration = 0;
-  ctx.textureWidth = DEFAULT_WIDTH;
-  ctx.textureHeight = DEFAULT_HEIGHT;
 
   auto now = std::chrono::system_clock::now();
 
