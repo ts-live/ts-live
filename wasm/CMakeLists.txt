@@ -116,7 +116,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp audio/audioworklet.cpp)
+add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp yadif_replace.c halide-yadif.cpp audio/audioworklet.cpp video/webgpu.cpp)
 # set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
 add_dependencies(ffmpeg-sdl2 ffmpeg)
 target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
@@ -132,6 +132,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   # "SHELL:-s PROXY_TO_PTHREAD=1"
   "SHELL:-s ASSERTIONS=1"
   "SHELL:-s USE_SDL=0"
+  "SHELL:-s USE_WEBGPU=1"
   "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"
   "SHELL:-s ENVIRONMENT=web,worker"

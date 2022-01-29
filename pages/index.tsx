@@ -25,6 +25,7 @@ import {
   Line,
   Legend
 } from 'recharts'
+import Head from 'next/head'
 
 declare interface WasmModule extends EmscriptenModule {
   getExceptionMsg(ex: number): string
@@ -327,16 +328,29 @@ const Page: NextPage = () => {
         background: #1e1e1e;
       `}
     >
+      <Head>
+        <meta
+          httpEquiv='origin-trial'
+          content='Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
+        ></meta>
+      </Head>
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
               canvas: (function () { return document.getElementById('video'); })(),
-              canvasCtx: (function () { return document.getElementById('video').getContext('2d'); })(),
+              noInitialRun: true,
+              async onRuntimeInitialized() {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (adapter === null) return;
+                const device = await adapter.requestDevice();
+                Module['preinitializedWebGPUDevice'] = device;
+                Module._main();
+              },
               doNotCaptureKeyboard: true,
-              onRuntimeInitialized: function(){
-                Module.setLogLevelInfo();
-                console.log('Module setup OK');
-              }
+              // onRuntimeInitialized: function(){
+              //   Module.setLogLevelInfo();
+              //   console.log('Module setup OK');
+              // }
             };
 
         `}

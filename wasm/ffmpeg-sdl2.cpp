@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "audio/audioworklet.hpp"
+#include "video/webgpu.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -70,22 +71,6 @@ std::vector<emscripten::val> statsBuffer;
 emscripten::val captionCallback = emscripten::val::null();
 emscripten::val statsCallback = emscripten::val::null();
 } // namespace
-
-// clang-format off
-EM_JS(void, set_style, (int width), {
-  const scaleX = 1920 / width;
-  const transform = Module.canvas.style.transform;
-  // Module.canvas.style.aspectRatio = `${width} / 1080`;
-  if (transform.indexOf('scaleX') < 0) {
-    const newTransform = `${transform} scaleX(${1920 / width})`;
-    Module.canvas.style.transform = newTransform;
-  } else {
-    const re = new RegExp('scaleX.([-0-9.]+).');
-    const newTransform = transform.replace(/scaleX.[-0-9.]+./, `scaleX(${1920 / width})`);
-    Module.canvas.style.transform = newTransform;
-  }
-});
-// clang-format on
 
 // utility
 std::string getExceptionMsg(intptr_t ptr) {
@@ -722,51 +707,53 @@ void mainloop(void *arg) {
       double timestamp =
           currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
 
-      // clang-format off
-      EM_ASM({
-        if (Module.canvas.width != $0 || Module.canvas.height != $1) {
-          Module.canvas.width = $0;
-          Module.canvas.height = $1;
-          const scaleX = 1920 / $0;
-          const transform = Module.canvas.style.transform;
-          if (transform.indexOf('scaleX') < 0) {
-            const newTransform = `${transform} scaleX(${1920 / $0})`;
-            Module.canvas.style.transform = newTransform;
-          } else {
-            const re = new RegExp('scaleX.([-0-9.]+).');
-            const newTransform = transform.replace(/scaleX.[-0-9.]+./, `scaleX(${1920 / $0})`);
-            Module.canvas.style.transform = newTransform;
-          }
-        }
-      }, currentFrame->width, currentFrame->height);
-      EM_ASM({
-        const videoFrame = new VideoFrame(HEAPU8, {
-          format: "I420",
-          layout: [
-            {
-              offset: $1,
-              stride: $2
-            },
-            {
-              offset: $3,
-              stride: $4
-            },
-            {
-              offset: $5,
-              stride: $6
-            }
-          ],
-          codedWidth: Module.canvas.width,
-          codedHeight: Module.canvas.height,
-          timestamp: $0
-        });
-        Module.canvasCtx.drawImage(videoFrame, 0, 0);
-        videoFrame.close();
-      }, timestamp,
-        currentFrame->data[0], currentFrame->linesize[0],
-        currentFrame->data[1], currentFrame->linesize[1],
-        currentFrame->data[2], currentFrame->linesize[2]);
-      // clang-format on
+      // // clang-format off
+      // EM_ASM({
+      //   if (Module.canvas.width != $0 || Module.canvas.height != $1) {
+      //     Module.canvas.width = $0;
+      //     Module.canvas.height = $1;
+      //     const scaleX = 1920 / $0;
+      //     const transform = Module.canvas.style.transform;
+      //     if (transform.indexOf('scaleX') < 0) {
+      //       const newTransform = `${transform} scaleX(${1920 / $0})`;
+      //       Module.canvas.style.transform = newTransform;
+      //     } else {
+      //       const re = new RegExp('scaleX.([-0-9.]+).');
+      //       const newTransform = transform.replace(/scaleX.[-0-9.]+./,
+      //       `scaleX(${1920 / $0})`); Module.canvas.style.transform =
+      //       newTransform;
+      //     }
+      //   }
+      // }, currentFrame->width, currentFrame->height);
+      // EM_ASM({
+      //   const videoFrame = new VideoFrame(HEAPU8, {
+      //     format: "I420",
+      //     layout: [
+      //       {
+      //         offset: $1,
+      //         stride: $2
+      //       },
+      //       {
+      //         offset: $3,
+      //         stride: $4
+      //       },
+      //       {
+      //         offset: $5,
+      //         stride: $6
+      //       }
+      //     ],
+      //     codedWidth: Module.canvas.width,
+      //     codedHeight: Module.canvas.height,
+      //     timestamp: $0
+      //   });
+      //   Module.canvasCtx.drawImage(videoFrame, 0, 0);
+      //   videoFrame.close();
+      // }, timestamp,
+      //   currentFrame->data[0], currentFrame->linesize[0],
+      //   currentFrame->data[1], currentFrame->linesize[1],
+      //   currentFrame->data[2], currentFrame->linesize[2]);
+      // // clang-format on
+      drawWebGpu(currentFrame);
 
       av_frame_free(&currentFrame);
     }
@@ -813,8 +800,6 @@ int main() {
   spdlog::info("Wasm main() started.");
   startTime = std::chrono::system_clock::now();
 
-  set_style(DEFAULT_WIDTH);
-
   auto now = std::chrono::system_clock::now();
 
   // デコーダスレッド起動
@@ -825,6 +810,9 @@ int main() {
       decoderThread();
     }
   });
+
+  // WebGPU起動
+  initWebGpu();
 
   // AudioWorklet起動
   startAudioWorklet();
