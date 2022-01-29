@@ -14,15 +14,10 @@ struct context {
   WGPUSwapChain swapChain;
   WGPUQueue queue;
   WGPURenderPipeline pipeline;
-  WGPUBuffer vertBuf;
-  WGPUBuffer indxBuf;
-  WGPUBuffer uRotBuf;
-  WGPUBuffer frameY1440Buf, frameY1920Buf;
   WGPUTexture frameY1440Texture, frameY1920Texture;
   WGPUTextureView view1440, view1920;
   WGPUBindGroup bindGroup1440, bindGroup1920;
   WGPUSampler sampler;
-  float rotDeg = 0.0f;
 };
 
 static context ctx;
@@ -227,32 +222,7 @@ static void createPipelineAndBuffers() {
   wgpuShaderModuleRelease(fragMod);
   wgpuShaderModuleRelease(vertMod);
 
-  // create the buffers (x, y, r, g, b)
-  float const vertData[] = {
-      -0.8f, -0.8f, 0.0f, 0.0f, 1.0f, // BL
-      0.8f,  -0.8f, 0.0f, 1.0f, 0.0f, // BR
-      -0.0f, 0.8f,  1.0f, 0.0f, 0.0f, // top
-  };
-  uint16_t const indxData[] = {
-      0, 1, 2, 3, 4, 5,
-      0 // padding (better way of doing this?)
-  };
-  // ctx.vertBuf =
-  //     createBuffer(vertData, sizeof(vertData), WGPUBufferUsage_Vertex);
-  // ctx.indxBuf = createBuffer(indxData, sizeof(indxData),
-  // WGPUBufferUsage_Index);
-
-  // create the uniform bind group (note 'rotDeg' is copied here, not bound in
-  // any way)
-  ctx.uRotBuf =
-      createBuffer(&ctx.rotDeg, sizeof(ctx.rotDeg), WGPUBufferUsage_Uniform);
-
   std::vector<uint8_t> tmpBuffer(1920 * 1080);
-
-  ctx.frameY1440Buf = createBuffer(&tmpBuffer[0], sizeof(uint8_t) * 1440 * 1080,
-                                   WGPUBufferUsage_Uniform);
-  ctx.frameY1920Buf = createBuffer(&tmpBuffer[0], sizeof(uint8_t) * 1920 * 1080,
-                                   WGPUBufferUsage_Uniform);
 
   WGPUExtent3D size1440 = {};
   size1440.width = 1440;
@@ -270,14 +240,7 @@ static void createPipelineAndBuffers() {
   textureDesc.usage =
       WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
   textureDesc.sampleCount = 1;
-  textureDesc.mipLevelCount = 2;
-  //   WGPUTextureUsage_None = 0x00000000,
-  // WGPUTextureUsage_CopySrc = 0x00000001,
-  // WGPUTextureUsage_CopyDst = 0x00000002,
-  // WGPUTextureUsage_TextureBinding = 0x00000004,
-  // WGPUTextureUsage_StorageBinding = 0x00000008,
-  // WGPUTextureUsage_RenderAttachment = 0x00000010,
-  // WGPUTextureUsage_Force32 = 0x7FFFFFFF
+  textureDesc.mipLevelCount = 1;
 
   ctx.frameY1440Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
 
@@ -306,8 +269,6 @@ static void createPipelineAndBuffers() {
 
   bgEntries1440[1].binding = 1;
   bgEntries1440[1].textureView = ctx.view1440;
-  bgEntries1440[1].offset = 0;
-  bgEntries1440[1].size = sizeof(ctx.frameY1440Buf);
 
   WGPUBindGroupEntry bgEntries1920[2] = {{}, {}};
   bgEntries1920[0].binding = 0;
@@ -315,8 +276,6 @@ static void createPipelineAndBuffers() {
 
   bgEntries1920[1].binding = 1;
   bgEntries1920[1].textureView = ctx.view1920;
-  bgEntries1920[1].offset = 0;
-  bgEntries1920[1].size = sizeof(ctx.frameY1920Buf);
 
   WGPUBindGroupDescriptor bgDesc1440 = {};
   bgDesc1440.layout = bindGroupLayout;
@@ -400,19 +359,10 @@ void drawWebGpu(AVFrame *frame) {
   copySize.height = frame->height;
   copySize.depthOrArrayLayers = 1;
 
-  // typedef struct WGPUImageCopyBuffer {
-  //   WGPUChainedStruct const *nextInChain;
-  //   WGPUTextureDataLayout layout;
-  //   WGPUBuffer buffer;
-  // } WGPUImageCopyBuffer;
-  WGPUTextureDataLayout copyBufferLayout = {};
-  copyBufferLayout.rowsPerImage = frame->height;
-  copyBufferLayout.bytesPerRow = frame->width;
-  copyBufferLayout.offset = 0;
-  WGPUImageCopyBuffer copyBuffer = {};
-  copyBuffer.layout = copyBufferLayout;
-  copyBuffer.buffer =
-      frame->width == 1440 ? ctx.frameY1440Buf : ctx.frameY1920Buf;
+  WGPUTextureDataLayout textureDataLayout = {};
+  textureDataLayout.rowsPerImage = frame->height;
+  textureDataLayout.bytesPerRow = frame->width;
+  textureDataLayout.offset = 0;
 
   WGPUOrigin3D origin = {};
 
@@ -431,7 +381,7 @@ void drawWebGpu(AVFrame *frame) {
   //                                       &copySize);
 
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[0],
-                        frame->height * frame->linesize[0], &copyBufferLayout,
+                        frame->height * frame->linesize[0], &textureDataLayout,
                         &copySize);
 
   WGPURenderPassEncoder pass =
