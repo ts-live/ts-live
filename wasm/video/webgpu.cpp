@@ -10,15 +10,16 @@ extern "C" {
 }
 
 struct context {
+  int textureWidth = 0;
+  int textureHeight = 0;
   WGPUDevice device;
   WGPUSwapChain swapChain;
   WGPUQueue queue;
   WGPURenderPipeline pipeline;
-  WGPUTexture frameY1440Texture, frameU1440Texture, frameV1440Texture,
-      frameY1920Texture, frameU1920Texture, frameV1920Texture;
-  WGPUTextureView frameY1440View, frameU1440View, frameV1440View,
-      frameY1920View, frameU1920View, frameV1920View;
-  WGPUBindGroup bindGroup1440, bindGroup1920;
+  WGPUBindGroupLayout bindGroupLayout;
+  WGPUTexture frameTextureY, frameTextureU, frameTextureV;
+  WGPUTextureView frameViewY, frameViewU, frameViewV;
+  WGPUBindGroup bindGroup;
   WGPUSampler sampler;
 };
 
@@ -121,6 +122,77 @@ static WGPUShaderModule createShader(const char *const code,
   return wgpuDeviceCreateShaderModule(ctx.device, &desc);
 }
 
+static void createTextures(int width, int height) {
+  std::vector<uint8_t> tmpBuffer(width * height);
+
+  WGPUExtent3D size = {};
+  size.width = width;
+  size.height = height;
+  size.depthOrArrayLayers = 1;
+
+  WGPUExtent3D uvSize = {};
+  uvSize.width = width / 2;
+  uvSize.height = height / 2;
+  uvSize.depthOrArrayLayers = 1;
+
+  WGPUTextureDescriptor textureDesc = {};
+  textureDesc.dimension = WGPUTextureDimension_2D;
+  textureDesc.format = WGPUTextureFormat_R8Unorm;
+  textureDesc.usage =
+      WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
+  textureDesc.sampleCount = 1;
+  textureDesc.mipLevelCount = 1;
+
+  textureDesc.size = size;
+  ctx.frameTextureY = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+
+  textureDesc.size = uvSize;
+  ctx.frameTextureU = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.frameTextureV = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+
+  WGPUSamplerDescriptor samplerDesc = {};
+  samplerDesc.magFilter = WGPUFilterMode_Linear;
+  samplerDesc.minFilter = WGPUFilterMode_Linear;
+  samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
+  samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
+
+  ctx.sampler = wgpuDeviceCreateSampler(ctx.device, &samplerDesc);
+
+  WGPUTextureViewDescriptor viewDesc = {};
+  viewDesc.dimension = WGPUTextureViewDimension_2D;
+  viewDesc.format = WGPUTextureFormat_R8Unorm;
+  viewDesc.arrayLayerCount = 1;
+  viewDesc.mipLevelCount = 1;
+  viewDesc.aspect = WGPUTextureAspect_All;
+
+  ctx.frameViewY = wgpuTextureCreateView(ctx.frameTextureY, &viewDesc);
+  ctx.frameViewU = wgpuTextureCreateView(ctx.frameTextureU, &viewDesc);
+  ctx.frameViewV = wgpuTextureCreateView(ctx.frameTextureV, &viewDesc);
+
+  WGPUBindGroupEntry bgEntries[4] = {{}, {}, {}, {}};
+  bgEntries[0].binding = 0;
+  bgEntries[0].sampler = ctx.sampler;
+
+  bgEntries[1].binding = 1;
+  bgEntries[1].textureView = ctx.frameViewY;
+
+  bgEntries[2].binding = 2;
+  bgEntries[2].textureView = ctx.frameViewU;
+
+  bgEntries[3].binding = 3;
+  bgEntries[3].textureView = ctx.frameViewV;
+
+  WGPUBindGroupDescriptor bgDesc = {};
+  bgDesc.layout = ctx.bindGroupLayout;
+  bgDesc.entryCount = 4;
+  bgDesc.entries = bgEntries;
+
+  ctx.bindGroup = wgpuDeviceCreateBindGroup(ctx.device, &bgDesc);
+
+  ctx.textureWidth = width;
+  ctx.textureHeight = height;
+}
+
 /**
  * Bare minimum pipeline to draw a triangle using the above shaders.
  */
@@ -160,13 +232,12 @@ static void createPipeline() {
   WGPUBindGroupLayoutDescriptor bglDesc = {};
   bglDesc.entryCount = 4;
   bglDesc.entries = bglEntries;
-  WGPUBindGroupLayout bindGroupLayout =
-      wgpuDeviceCreateBindGroupLayout(ctx.device, &bglDesc);
+  ctx.bindGroupLayout = wgpuDeviceCreateBindGroupLayout(ctx.device, &bglDesc);
 
   // pipeline layout (used by the render pipeline, released after its creation)
   WGPUPipelineLayoutDescriptor layoutDesc = {};
   layoutDesc.bindGroupLayoutCount = 1;
-  layoutDesc.bindGroupLayouts = &bindGroupLayout;
+  layoutDesc.bindGroupLayouts = &ctx.bindGroupLayout;
   WGPUPipelineLayout pipelineLayout =
       wgpuDeviceCreatePipelineLayout(ctx.device, &layoutDesc);
 
@@ -219,113 +290,6 @@ static void createPipeline() {
 
   wgpuShaderModuleRelease(fragMod);
   wgpuShaderModuleRelease(vertMod);
-
-  std::vector<uint8_t> tmpBuffer(1920 * 1080);
-
-  WGPUExtent3D size1440 = {};
-  size1440.width = 1440;
-  size1440.height = 1080;
-  size1440.depthOrArrayLayers = 1;
-  WGPUExtent3D size1920 = {};
-  size1920.width = 1920;
-  size1920.height = 1080;
-  size1920.depthOrArrayLayers = 1;
-
-  WGPUExtent3D size1440uv = {};
-  size1440uv.width = 720;
-  size1440uv.height = 540;
-  size1440uv.depthOrArrayLayers = 1;
-  WGPUExtent3D size1920uv = {};
-  size1920uv.width = 960;
-  size1920uv.height = 540;
-  size1920uv.depthOrArrayLayers = 1;
-
-  WGPUTextureDescriptor textureDesc = {};
-  textureDesc.dimension = WGPUTextureDimension_2D;
-  textureDesc.format = WGPUTextureFormat_R8Unorm;
-  textureDesc.usage =
-      WGPUTextureUsage_CopyDst | WGPUTextureUsage_TextureBinding;
-  textureDesc.sampleCount = 1;
-  textureDesc.mipLevelCount = 1;
-
-  textureDesc.size = size1440;
-  ctx.frameY1440Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-
-  textureDesc.size = size1920;
-  ctx.frameY1920Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-
-  textureDesc.size = size1440uv;
-  ctx.frameU1440Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-  ctx.frameV1440Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-
-  textureDesc.size = size1920uv;
-  ctx.frameU1920Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-  ctx.frameV1920Texture = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-
-  WGPUSamplerDescriptor samplerDesc = {};
-  samplerDesc.magFilter = WGPUFilterMode_Linear;
-  samplerDesc.minFilter = WGPUFilterMode_Linear;
-  samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
-  samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
-
-  ctx.sampler = wgpuDeviceCreateSampler(ctx.device, &samplerDesc);
-
-  WGPUTextureViewDescriptor viewDesc = {};
-  viewDesc.dimension = WGPUTextureViewDimension_2D;
-  viewDesc.format = WGPUTextureFormat_R8Unorm;
-  viewDesc.arrayLayerCount = 1;
-  viewDesc.mipLevelCount = 1;
-  viewDesc.aspect = WGPUTextureAspect_All;
-
-  ctx.frameY1440View = wgpuTextureCreateView(ctx.frameY1440Texture, &viewDesc);
-  ctx.frameY1920View = wgpuTextureCreateView(ctx.frameY1920Texture, &viewDesc);
-
-  ctx.frameU1440View = wgpuTextureCreateView(ctx.frameU1440Texture, &viewDesc);
-  ctx.frameV1440View = wgpuTextureCreateView(ctx.frameV1440Texture, &viewDesc);
-  ctx.frameU1920View = wgpuTextureCreateView(ctx.frameU1920Texture, &viewDesc);
-  ctx.frameV1920View = wgpuTextureCreateView(ctx.frameV1920Texture, &viewDesc);
-
-  WGPUBindGroupEntry bgEntries1440[4] = {{}, {}, {}, {}};
-  bgEntries1440[0].binding = 0;
-  bgEntries1440[0].sampler = ctx.sampler;
-
-  bgEntries1440[1].binding = 1;
-  bgEntries1440[1].textureView = ctx.frameY1440View;
-
-  bgEntries1440[2].binding = 2;
-  bgEntries1440[2].textureView = ctx.frameU1440View;
-
-  bgEntries1440[3].binding = 3;
-  bgEntries1440[3].textureView = ctx.frameV1440View;
-
-  WGPUBindGroupEntry bgEntries1920[4] = {{}, {}, {}, {}};
-  bgEntries1920[0].binding = 0;
-  bgEntries1920[0].sampler = ctx.sampler;
-
-  bgEntries1920[1].binding = 1;
-  bgEntries1920[1].textureView = ctx.frameY1920View;
-
-  bgEntries1920[2].binding = 2;
-  bgEntries1920[2].textureView = ctx.frameU1920View;
-
-  bgEntries1920[3].binding = 3;
-  bgEntries1920[3].textureView = ctx.frameV1920View;
-
-  WGPUBindGroupDescriptor bgDesc1440 = {};
-  bgDesc1440.layout = bindGroupLayout;
-  bgDesc1440.entryCount = 4;
-  bgDesc1440.entries = bgEntries1440;
-
-  WGPUBindGroupDescriptor bgDesc1920 = {};
-  bgDesc1920.layout = bindGroupLayout;
-  bgDesc1920.entryCount = 4;
-  bgDesc1920.entries = bgEntries1920;
-
-  ctx.bindGroup1440 = wgpuDeviceCreateBindGroup(ctx.device, &bgDesc1440);
-  ctx.bindGroup1920 = wgpuDeviceCreateBindGroup(ctx.device, &bgDesc1920);
-
-  // last bit of clean-up
-  wgpuBindGroupLayoutRelease(bindGroupLayout);
 }
 
 void initWebGpu() {
@@ -358,6 +322,10 @@ void initWebGpu() {
 }
 
 void drawWebGpu(AVFrame *frame) {
+  if (frame->width != ctx.textureWidth || frame->height != ctx.textureHeight) {
+    createTextures(frame->width, frame->height);
+  }
+
   WGPUTextureView backBufView =
       wgpuSwapChainGetCurrentTextureView(ctx.swapChain); // create textureView
 
@@ -422,19 +390,17 @@ void drawWebGpu(AVFrame *frame) {
   // wgpuCommandEncoderCopyBufferToTexture(encoder, &copyBuffer, &copyTexture,
   //                                       &copySize);
 
-  copyTexture.texture =
-      frame->width == 1440 ? ctx.frameY1440Texture : ctx.frameY1920Texture;
+  copyTexture.texture = ctx.frameTextureY;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[0],
                         frame->height * frame->linesize[0], &textureDataLayout,
                         &copySize);
 
-  copyTexture.texture =
-      frame->width == 1440 ? ctx.frameU1440Texture : ctx.frameU1920Texture;
+  copyTexture.texture = ctx.frameTextureU;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[1],
                         frame->height * frame->linesize[1],
                         &textureDataLayoutUv, &copySizeuv);
-  copyTexture.texture =
-      frame->width == 1440 ? ctx.frameV1440Texture : ctx.frameV1920Texture;
+
+  copyTexture.texture = ctx.frameTextureV;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[2],
                         frame->height * frame->linesize[2],
                         &textureDataLayoutUv, &copySizeuv);
@@ -442,9 +408,7 @@ void drawWebGpu(AVFrame *frame) {
   WGPURenderPassEncoder pass =
       wgpuCommandEncoderBeginRenderPass(encoder, &renderPass); // create pass
   wgpuRenderPassEncoderSetPipeline(pass, ctx.pipeline);
-  wgpuRenderPassEncoderSetBindGroup(
-      pass, 0, frame->width == 1440 ? ctx.bindGroup1440 : ctx.bindGroup1920, 0,
-      0);
+  wgpuRenderPassEncoderSetBindGroup(pass, 0, ctx.bindGroup, 0, 0);
   // wgpuRenderPassEncoderSetVertexBuffer(pass, 0, ctx.vertBuf, 0,
   //                                      WGPU_WHOLE_SIZE);
   // wgpuRenderPassEncoderSetIndexBuffer(pass, ctx.indxBuf,
