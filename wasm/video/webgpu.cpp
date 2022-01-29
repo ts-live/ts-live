@@ -122,26 +122,9 @@ static WGPUShaderModule createShader(const char *const code,
 }
 
 /**
- * Helper to create a buffer.
- *
- * \param[in] data pointer to the start of the raw data
- * \param[in] size number of bytes in \a data
- * \param[in] usage type of buffer
- */
-static WGPUBuffer createBuffer(const void *data, size_t size,
-                               WGPUBufferUsage usage) {
-  WGPUBufferDescriptor desc = {};
-  desc.usage = WGPUBufferUsage_CopyDst | usage;
-  desc.size = size;
-  WGPUBuffer buffer = wgpuDeviceCreateBuffer(ctx.device, &desc);
-  wgpuQueueWriteBuffer(ctx.queue, buffer, 0, data, size);
-  return buffer;
-}
-
-/**
  * Bare minimum pipeline to draw a triangle using the above shaders.
  */
-static void createPipelineAndBuffers() {
+static void createPipeline() {
   // compile shaders
   // NOTE: these are now the WGSL shaders (tested with Dawn and Chrome Canary)
   WGPUShaderModule vertMod = createShader(triangle_vert_wgsl);
@@ -282,6 +265,8 @@ static void createPipelineAndBuffers() {
   WGPUSamplerDescriptor samplerDesc = {};
   samplerDesc.magFilter = WGPUFilterMode_Linear;
   samplerDesc.minFilter = WGPUFilterMode_Linear;
+  samplerDesc.addressModeU = WGPUAddressMode_ClampToEdge;
+  samplerDesc.addressModeV = WGPUAddressMode_ClampToEdge;
 
   ctx.sampler = wgpuDeviceCreateSampler(ctx.device, &samplerDesc);
 
@@ -308,10 +293,10 @@ static void createPipelineAndBuffers() {
   bgEntries1440[1].textureView = ctx.frameY1440View;
 
   bgEntries1440[2].binding = 2;
-  bgEntries1440[2].textureView = ctx.frameY1440View;
+  bgEntries1440[2].textureView = ctx.frameU1440View;
 
   bgEntries1440[3].binding = 3;
-  bgEntries1440[3].textureView = ctx.frameY1440View;
+  bgEntries1440[3].textureView = ctx.frameV1440View;
 
   WGPUBindGroupEntry bgEntries1920[4] = {{}, {}, {}, {}};
   bgEntries1920[0].binding = 0;
@@ -350,7 +335,7 @@ void initWebGpu() {
   ctx.queue = wgpuDeviceGetQueue(ctx.device);
 
   // pipeline/buffer
-  createPipelineAndBuffers();
+  createPipeline();
 
   // create swapchain?
   WGPUSurfaceDescriptorFromCanvasHTMLSelector canvasDesc = {};
