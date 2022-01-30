@@ -25,9 +25,14 @@ $ yarn dev
 
 - WebAssembly thread を使う（=SharedArrayBuffer を使う）関係で Secure Context 必須
 - mixed content の関係で mirakurun サーバと http/https 混在は出来ない
+- [WebGPU](https://chromestatus.com/feature/6213121689518080) を使っているため、localhost:3000 以外で起動するには Origin Trials キーの取得・設定が必要
 
 上記 2 制約から、「http://localhostでアクセスしてmirakurunにhttp接続」または「httpsサーバに接続してmirakurunにもhttps接続」のどちらかでないと動きません。
 
 ## ファイル再生機能
 
 開発を楽にする目的なのであまり利便性とか力を入れてません。
+
+## Origin Trial キー取得方法
+
+[Chrome の Origin Trials ページ](https://developer.chrome.com/origintrials/#/trials/active) から `WebGPU` の REGISTER ボタンを押し、Web Origin にhttps://hostname:port を入力、Notices と Terms を良く読んで REGISTER ボタンを押して登録します。登録後の画面で出てくる `Token` を web-ts-player の設定に入力します。
