@@ -583,7 +583,7 @@ const Page: NextPage = () => {
           onContextMenu={ev => ev.preventDefault()}
           // transformはWasmが書き換えるので要素のタグに直接書くこと
           style={{
-            transform: 'translate(-50%, -50%);'
+            transform: 'translate(-50%, -50%)'
           }}
         ></canvas>
         <div
