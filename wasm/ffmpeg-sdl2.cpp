@@ -59,8 +59,6 @@ std::thread downloaderThread;
 bool resetedDecoder = false;
 bool resetedDownloader = false;
 
-bool doDeinterlace = false;
-
 std::vector<emscripten::val> statsBuffer;
 
 emscripten::val captionCallback = emscripten::val::null();
@@ -80,9 +78,6 @@ void showVersionInfo() {
 
 void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
 void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
-
-// Interlace Setting
-void setDeinterlace(bool deinterlace) { doDeinterlace = deinterlace; }
 
 // Callback register
 void setCaptionCallback(emscripten::val callback) {
@@ -716,7 +711,6 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("setCaptionCallback", &setCaptionCallback);
   emscripten::function("setStatsCallback", &setStatsCallback);
   emscripten::function("playFile", &playFile);
-  emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
   emscripten::function("reset", &reset);

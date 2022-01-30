@@ -16,15 +16,7 @@ import {
   Select,
   TextField
 } from '@mui/material'
-import {
-  CartesianGrid,
-  LineChart,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Line,
-  Legend
-} from 'recharts'
+import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 
 declare interface WasmModule extends EmscriptenModule {
@@ -37,7 +29,6 @@ declare interface WasmModule extends EmscriptenModule {
     callback: ((statsDataList: Array<StatsData>) => void) | null
   ): void
   playFile(url: string): void
-  setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
   reset(): void
@@ -92,10 +83,6 @@ const Page: NextPage = () => {
   const [activeRecordedFileId, setActiveRecordedFileId] = useState<number>()
   const [playMode, setPlayMode] = useState<string>('live')
 
-  const [doDeinterlace, setDoDeinterlace] = useLocalStorage<boolean>(
-    'tsplayerDoDeinterlace',
-    false
-  )
   const [stopFunc, setStopFunc] = useState(() => () => {})
   const [chartData, setChartData] = useState<Array<StatsData>>([
     {
@@ -208,16 +195,6 @@ const Page: NextPage = () => {
   }, [epgStationServer, epgStationOk])
 
   useEffect(() => {
-    if (doDeinterlace === undefined) {
-      setDoDeinterlace(false)
-      return
-    }
-    if ((window as any).Module !== undefined) {
-      Module.setDeinterlace(doDeinterlace)
-    }
-  }, [doDeinterlace])
-
-  useEffect(() => {
     if (!touched) {
       // first gestureまでは再生しない
       return
@@ -232,7 +209,6 @@ const Page: NextPage = () => {
     // Module.setCaptionCallback(captionData => {
     //   console.log('Caption Callback', captionData)
     // })
-    Module.setDeinterlace(doDeinterlace || false)
     if (showCharts) {
       // depsに入れると毎回リスタートするので入れない
       Module.setStatsCallback(statsCallback)
@@ -536,23 +512,6 @@ const Page: NextPage = () => {
               )}
             </Select>
           </FormControl>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            <FormGroup>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={doDeinterlace}
-                    onChange={ev => setDoDeinterlace(ev.target.checked)}
-                  ></Checkbox>
-                }
-                label='インターレースを解除する'
-              ></FormControlLabel>
-            </FormGroup>
-          </div>
           <div>
             <FormGroup>
               <FormControlLabel
