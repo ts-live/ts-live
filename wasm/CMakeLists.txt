@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(ts-wasm LANGUAGES CXX C)
+project(ts-live LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
@@ -82,14 +82,14 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ffmpeg-sdl2 ffmpeg-sdl2.cpp audio/audioworklet.cpp video/webgpu.cpp)
-# set_target_properties(ffmpeg-sdl2 PROPERTIES OUTPUT_NAME ffmpeg-sdl2)
-add_dependencies(ffmpeg-sdl2 ffmpeg)
-target_compile_options(ffmpeg-sdl2 PUBLIC -matomics -mbulk-memory)
-target_compile_features(ffmpeg-sdl2 PRIVATE cxx_std_20)
-target_include_directories(ffmpeg-sdl2 PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
-target_link_libraries(ffmpeg-sdl2 fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
-target_link_options(ffmpeg-sdl2 PRIVATE
+add_executable(ts-live ts-live.cpp audio/audioworklet.cpp video/webgpu.cpp)
+# set_target_properties(ts-live PROPERTIES OUTPUT_NAME ts-live)
+add_dependencies(ts-live ffmpeg)
+target_compile_options(ts-live PUBLIC -matomics -mbulk-memory)
+target_compile_features(ts-live PRIVATE cxx_std_20)
+target_include_directories(ts-live PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
+target_link_libraries(ts-live fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
+target_link_options(ts-live PRIVATE
   "-Wno-pthreads-mem-growth"
   "SHELL:-s ALLOW_MEMORY_GROWTH=1"
   "SHELL:-s WASM=1"
@@ -108,5 +108,5 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js@/processor.js"
   "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/video/shaders@/shaders"
   )
-install(TARGETS ffmpeg-sdl2 DESTINATION .)
-install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.worker.js DESTINATION .)
+install(TARGETS ts-live DESTINATION .)
+install(FILES ${CMAKE_BINARY_DIR}/ts-live.wasm ${CMAKE_BINARY_DIR}/ts-live.worker.js DESTINATION .)
