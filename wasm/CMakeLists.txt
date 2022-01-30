@@ -141,6 +141,7 @@ target_link_options(ffmpeg-sdl2 PRIVATE
   "SHELL:--bind"
   "SHELL:-s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0"
   "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js@/processor.js"
+  "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/video/shaders@/shaders"
   )
 install(TARGETS ffmpeg-sdl2 DESTINATION .)
 install(FILES ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.wasm ${CMAKE_BINARY_DIR}/ffmpeg-sdl2.worker.js DESTINATION .)

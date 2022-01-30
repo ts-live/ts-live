@@ -3,7 +3,9 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #include <emscripten/html5_webgpu.h>
+#include <fstream>
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -25,84 +27,13 @@ struct context {
 
 static context ctx;
 
-/**
- * WGSL equivalent of \c triangle_vert_spirv.
- */
-static char const triangle_vert_wgsl[] = R"(
-[[group(0), binding(0)]] var mySampler : sampler;
-[[group(0), binding(1)]] var myTexture : texture_2d<f32>;
-
-struct VertexOutput {
-  [[builtin(position)]] Position : vec4<f32>;
-  [[location(0)]] fragUV : vec2<f32>;
-};
-
-[[stage(vertex)]]
-fn main([[builtin(vertex_index)]] VertexIndex : u32) -> VertexOutput {
-  var pos = array<vec2<f32>, 6>(
-      vec2<f32>( 1.0,  1.0),
-      vec2<f32>( 1.0, -1.0),
-      vec2<f32>(-1.0, -1.0),
-      vec2<f32>( 1.0,  1.0),
-      vec2<f32>(-1.0, -1.0),
-      vec2<f32>(-1.0,  1.0));
-
-  var uv = array<vec2<f32>, 6>(
-      vec2<f32>(1.0, 0.0),
-      vec2<f32>(1.0, 1.0),
-      vec2<f32>(0.0, 1.0),
-      vec2<f32>(1.0, 0.0),
-      vec2<f32>(0.0, 1.0),
-      vec2<f32>(0.0, 0.0));
-
-  var output : VertexOutput;
-  output.Position = vec4<f32>(pos[VertexIndex], 0.0, 1.0);
-  output.fragUV = uv[VertexIndex];
-  return output;
-}
-
-[[stage(fragment)]]
-fn frag_main([[location(0)]] fragUV : vec2<f32>) -> [[location(0)]] vec4<f32> {
-  return textureSample(myTexture, mySampler, fragUV);
-}
-)";
-
-/**
- * WGSL equivalent of \c triangle_frag_spirv.
- */
-static char const triangle_frag_wgsl[] = R"(
-[[group(0), binding(0)]] var mySampler : sampler;
-[[group(0), binding(1)]] var yTexture : texture_2d<f32>;
-[[group(0), binding(2)]] var uTexture : texture_2d<f32>;
-[[group(0), binding(3)]] var vTexture : texture_2d<f32>;
-
-[[stage(fragment)]]
-// ITU-R BT.709 TODO: get color space from stream.
-fn main([[location(0)]] fragUV : vec2<f32>) -> [[location(0)]] vec4<f32> {
-  var y = (textureSample(yTexture, mySampler, fragUV)[0] - 16.0 / 255.0);
-  var u = (textureSample(uTexture, mySampler, fragUV)[0] - 128.0 / 255.0);
-  var v = (textureSample(vTexture, mySampler, fragUV)[0] - 128.0 / 255.0);
-  return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
-}
-)";
-
-/**
- * Helper to create a shader from SPIR-V IR.
- *
- * \param[in] code shader source (output using the \c -V \c -x options in \c
- * glslangValidator) \param[in] size size of \a code in bytes \param[in] label
- * optional shader name
- */
-/*static*/ WGPUShaderModule createShader(const uint32_t *code, uint32_t size,
-                                         const char *label = nullptr) {
-  WGPUShaderModuleSPIRVDescriptor spirv = {};
-  spirv.chain.sType = WGPUSType_ShaderModuleSPIRVDescriptor;
-  spirv.codeSize = size / sizeof(uint32_t);
-  spirv.code = code;
-  WGPUShaderModuleDescriptor desc = {};
-  desc.nextInChain = reinterpret_cast<WGPUChainedStruct *>(&spirv);
-  desc.label = label;
-  return wgpuDeviceCreateShaderModule(ctx.device, &desc);
+static std::string slurp(const char *filename) {
+  std::ifstream in;
+  in.open(filename, std::ifstream::in | std::ifstream::binary);
+  std::stringstream sstr;
+  sstr << in.rdbuf();
+  in.close();
+  return sstr.str();
 }
 
 /**
@@ -120,6 +51,15 @@ static WGPUShaderModule createShader(const char *const code,
   desc.nextInChain = reinterpret_cast<WGPUChainedStruct *>(&wgsl);
   desc.label = label;
   return wgpuDeviceCreateShaderModule(ctx.device, &desc);
+}
+
+static void releaseTextures() {
+  wgpuTextureViewRelease(ctx.frameViewY);
+  wgpuTextureViewRelease(ctx.frameViewU);
+  wgpuTextureViewRelease(ctx.frameViewV);
+  wgpuTextureRelease(ctx.frameTextureY);
+  wgpuTextureRelease(ctx.frameTextureU);
+  wgpuTextureRelease(ctx.frameTextureV);
 }
 
 static void createTextures(int width, int height) {
@@ -193,14 +133,12 @@ static void createTextures(int width, int height) {
   ctx.textureHeight = height;
 }
 
-/**
- * Bare minimum pipeline to draw a triangle using the above shaders.
- */
 static void createPipeline() {
-  // compile shaders
-  // NOTE: these are now the WGSL shaders (tested with Dawn and Chrome Canary)
-  WGPUShaderModule vertMod = createShader(triangle_vert_wgsl);
-  WGPUShaderModule fragMod = createShader(triangle_frag_wgsl);
+  std::string vertWgsl = slurp("/shaders/simple.vert.wgsl");
+  std::string fragWgsl = slurp("/shaders/yuv2rgba.frag.wgsl");
+
+  WGPUShaderModule vertMod = createShader(vertWgsl.c_str());
+  WGPUShaderModule fragMod = createShader(fragWgsl.c_str());
 
   WGPUSamplerBindingLayout samplerLayout = {};
   samplerLayout.type = WGPUSamplerBindingType_Filtering;
@@ -210,8 +148,6 @@ static void createPipeline() {
   textureLayout.multisampled = false;
   textureLayout.viewDimension = WGPUTextureViewDimension_2D;
 
-  // bind group layout (used by both the pipeline layout and uniform bind group,
-  // released at the end of this function)
   WGPUBindGroupLayoutEntry bglEntries[4] = {{}, {}, {}, {}};
   bglEntries[0].binding = 0;
   bglEntries[0].visibility = WGPUShaderStage_Fragment;
@@ -234,14 +170,12 @@ static void createPipeline() {
   bglDesc.entries = bglEntries;
   ctx.bindGroupLayout = wgpuDeviceCreateBindGroupLayout(ctx.device, &bglDesc);
 
-  // pipeline layout (used by the render pipeline, released after its creation)
   WGPUPipelineLayoutDescriptor layoutDesc = {};
   layoutDesc.bindGroupLayoutCount = 1;
   layoutDesc.bindGroupLayouts = &ctx.bindGroupLayout;
   WGPUPipelineLayout pipelineLayout =
       wgpuDeviceCreatePipelineLayout(ctx.device, &layoutDesc);
 
-  // Fragment state
   WGPUBlendState blend = {};
   blend.color.operation = WGPUBlendOperation_Add;
   blend.color.srcFactor = WGPUBlendFactor_One;
@@ -254,7 +188,6 @@ static void createPipeline() {
   colorTarget.format = WGPUTextureFormat_BGRA8Unorm;
   colorTarget.blend = &blend;
   colorTarget.writeMask = WGPUColorWriteMask_All;
-  // WGPUColorTargetState colorTargets[2] = {colorTarget, colorTarget};
 
   WGPUFragmentState fragment = {};
   fragment.module = fragMod;
@@ -265,14 +198,11 @@ static void createPipeline() {
   WGPURenderPipelineDescriptor desc = {};
   desc.fragment = &fragment;
 
-  // Other state
   desc.layout = pipelineLayout;
   desc.depthStencil = nullptr;
 
   desc.vertex.module = vertMod;
   desc.vertex.entryPoint = "main";
-  // desc.vertex.bufferCount = 0; // 1;
-  // desc.vertex.buffers = &vertexBufferLayout;
 
   desc.multisample.count = 1;
   desc.multisample.mask = 0xFFFFFFFF;
@@ -319,10 +249,14 @@ void initWebGpu() {
   swapDesc.presentMode = WGPUPresentMode_Fifo;
 
   ctx.swapChain = wgpuDeviceCreateSwapChain(ctx.device, surface, &swapDesc);
+
+  // dummy texture.
+  createTextures(16, 16);
 }
 
 void drawWebGpu(AVFrame *frame) {
   if (frame->width != ctx.textureWidth || frame->height != ctx.textureHeight) {
+    releaseTextures();
     createTextures(frame->width, frame->height);
   }
 
@@ -383,13 +317,6 @@ void drawWebGpu(AVFrame *frame) {
   copyTexture.aspect = WGPUTextureAspect::WGPUTextureAspect_All;
   copyTexture.mipLevel = 0;
 
-  // wgpuQueueWriteBuffer(
-  //     ctx.queue, frame->width == 1440 ? ctx.frameY1440Buf :
-  //     ctx.frameY1920Buf, 0, frame->data[0], frame->height *
-  //     frame->linesize[0]);
-  // wgpuCommandEncoderCopyBufferToTexture(encoder, &copyBuffer, &copyTexture,
-  //                                       &copySize);
-
   copyTexture.texture = ctx.frameTextureY;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[0],
                         frame->height * frame->linesize[0], &textureDataLayout,
@@ -409,11 +336,6 @@ void drawWebGpu(AVFrame *frame) {
       wgpuCommandEncoderBeginRenderPass(encoder, &renderPass); // create pass
   wgpuRenderPassEncoderSetPipeline(pass, ctx.pipeline);
   wgpuRenderPassEncoderSetBindGroup(pass, 0, ctx.bindGroup, 0, 0);
-  // wgpuRenderPassEncoderSetVertexBuffer(pass, 0, ctx.vertBuf, 0,
-  //                                      WGPU_WHOLE_SIZE);
-  // wgpuRenderPassEncoderSetIndexBuffer(pass, ctx.indxBuf,
-  // WGPUIndexFormat_Uint16,
-  //                                     0, WGPU_WHOLE_SIZE);
   wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
   wgpuRenderPassEncoderEndPass(pass);
