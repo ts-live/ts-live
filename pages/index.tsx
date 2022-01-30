@@ -322,20 +322,7 @@ const Page: NextPage = () => {
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
-              canvas: (function () { return document.getElementById('video'); })(),
-              noInitialRun: true,
-              async onRuntimeInitialized() {
-                const adapter = await navigator.gpu.requestAdapter();
-                if (adapter === null) return;
-                const device = await adapter.requestDevice();
-                Module['preinitializedWebGPUDevice'] = device;
-                Module._main();
-              },
-              doNotCaptureKeyboard: true,
-              // onRuntimeInitialized: function(){
-              //   Module.setLogLevelInfo();
-              //   console.log('Module setup OK');
-              // }
+              // canvas: (function () { return document.getElementById('video'); })(),
             };
 
         `}

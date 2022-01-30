@@ -101,6 +101,7 @@ target_link_options(ts-live PRIVATE
   "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"
   "SHELL:-s ENVIRONMENT=web,worker"
+  "SHELL:-s ASYNCIFY=1"
   # "SHELL:-s EXPORTED_FUNCTIONS='[\"_main\"]'"
   # "SHELL:-s EXPORTED_RUNTIME_METHODS='[\"ccall\"]'"
   "SHELL:--bind"
