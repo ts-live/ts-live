@@ -2,7 +2,7 @@
 import { css } from '@emotion/react'
 import { NextPage } from 'next'
 import Script from 'next/script'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocalStorage } from 'react-use'
 import {
   Box,
@@ -60,6 +60,9 @@ const Page: NextPage = () => {
   const [drawer, setDrawer] = useState<boolean>(true)
   const [touched, setTouched] = useState<boolean>(false)
 
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   const [originTrialToken, setOriginTrialToken] = useLocalStorage<string>(
     'tsplayerOriginTrialToken',
     undefined
@@ -111,6 +114,17 @@ const Page: NextPage = () => {
       return prev.concat(statsDataList)
     })
   }, [])
+
+  useEffect(() => {
+    if (!canvasRef || !canvasRef.current) return
+    if (!videoRef || !videoRef.current) return
+    const stream = canvasRef.current.captureStream(60)
+    const video = videoRef.current
+    videoRef.current.onloadedmetadata = () => {
+      video.play()
+    }
+    videoRef.current.srcObject = stream
+  }, [canvasRef, videoRef])
 
   useEffect(() => {
     fetch(`${mirakurunServer}/api/version`)
@@ -205,6 +219,7 @@ const Page: NextPage = () => {
       // first gestureまでは再生しない
       return
     }
+    if (!('Module' in global)) return
     if (!mirakurunOk || !mirakurunServer || !activeService) {
       return
     }
@@ -318,16 +333,9 @@ const Page: NextPage = () => {
         {originTrialToken !== undefined ? (
           <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
         ) : null}
+        <script src='/wasm/ts-live.js'></script>
       </Head>
-      <Script id='setupModule' strategy='lazyOnload'>
-        {`
-            var Module = {
-              // canvas: (function () { return document.getElementById('video'); })(),
-            };
-
-        `}
-      </Script>
-      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script>
+      {/* <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script> */}
       <Drawer
         anchor='left'
         open={drawer}
@@ -549,15 +557,24 @@ const Page: NextPage = () => {
           height: 100%;
         `}
       >
-        <canvas
+        <video
+          ref={videoRef}
           css={css`
             position: absolute;
             top: 50%;
             left: 50%;
             max-width: 100%;
             max-height: 100%;
+            transform: translate(-50%, -50%);
+          `}
+          onClick={() => setDrawer(true)}
+        ></video>
+        <canvas
+          css={css`
+            display: none;
           `}
           id='video'
+          ref={canvasRef}
           tabIndex={-1}
           width={1920}
           height={1080}
