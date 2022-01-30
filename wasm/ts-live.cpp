@@ -686,12 +686,13 @@ int main() {
     }
   });
 
-  // WebGPU起動
-  initWebGpu();
-
   // AudioWorklet起動
   startAudioWorklet();
 
+  // WebGPU起動
+  initWebGpu();
+
+  // //
   // fps指定するとrAFループじゃなくタイマーになるので裏周りしても再生が続く。fps<=0だとrAFが使われるらしい。
   const int fps = 60;
   const int simulate_infinite_loop = 1;
