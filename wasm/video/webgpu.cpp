@@ -19,10 +19,12 @@ struct context {
   WGPUQueue queue;
   WGPURenderPipeline pipeline;
   WGPUBindGroupLayout bindGroupLayout;
-  WGPUTexture frameTextureY, frameTextureU, frameTextureV;
-  WGPUTextureView frameViewY, frameViewU, frameViewV;
+  WGPUTexture curTextureY, curTextureU, curTextureV;
+  WGPUTextureView curViewY, curViewU, curViewV;
   WGPUTexture prevTextureY, prevTextureU, prevTextureV;
   WGPUTextureView prevViewY, prevViewU, prevViewV;
+  WGPUTexture nextTextureY, nextTextureU, nextTextureV;
+  WGPUTextureView nextViewY, nextViewU, nextViewV;
   WGPUBindGroup bindGroup;
   WGPUSampler sampler;
 };
@@ -56,12 +58,12 @@ static WGPUShaderModule createShader(const char *const code,
 }
 
 static void releaseTextures() {
-  wgpuTextureViewRelease(ctx.frameViewY);
-  wgpuTextureViewRelease(ctx.frameViewU);
-  wgpuTextureViewRelease(ctx.frameViewV);
-  wgpuTextureRelease(ctx.frameTextureY);
-  wgpuTextureRelease(ctx.frameTextureU);
-  wgpuTextureRelease(ctx.frameTextureV);
+  wgpuTextureViewRelease(ctx.curViewY);
+  wgpuTextureViewRelease(ctx.curViewU);
+  wgpuTextureViewRelease(ctx.curViewV);
+  wgpuTextureRelease(ctx.curTextureY);
+  wgpuTextureRelease(ctx.curTextureU);
+  wgpuTextureRelease(ctx.curTextureV);
 
   wgpuTextureViewRelease(ctx.prevViewY);
   wgpuTextureViewRelease(ctx.prevViewU);
@@ -69,6 +71,13 @@ static void releaseTextures() {
   wgpuTextureRelease(ctx.prevTextureY);
   wgpuTextureRelease(ctx.prevTextureU);
   wgpuTextureRelease(ctx.prevTextureV);
+
+  wgpuTextureViewRelease(ctx.nextViewY);
+  wgpuTextureViewRelease(ctx.nextViewU);
+  wgpuTextureViewRelease(ctx.nextViewV);
+  wgpuTextureRelease(ctx.nextTextureY);
+  wgpuTextureRelease(ctx.nextTextureU);
+  wgpuTextureRelease(ctx.nextTextureV);
 }
 
 static void createTextures(int width, int height) {
@@ -93,14 +102,17 @@ static void createTextures(int width, int height) {
   textureDesc.mipLevelCount = 1;
 
   textureDesc.size = size;
-  ctx.frameTextureY = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.curTextureY = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
   ctx.prevTextureY = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.nextTextureY = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
 
   textureDesc.size = uvSize;
-  ctx.frameTextureU = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
-  ctx.frameTextureV = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.curTextureU = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.curTextureV = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
   ctx.prevTextureU = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
   ctx.prevTextureV = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.nextTextureU = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
+  ctx.nextTextureV = wgpuDeviceCreateTexture(ctx.device, &textureDesc);
 
   WGPUSamplerDescriptor samplerDesc = {};
   samplerDesc.magFilter = WGPUFilterMode_Linear;
@@ -117,21 +129,27 @@ static void createTextures(int width, int height) {
   viewDesc.mipLevelCount = 1;
   viewDesc.aspect = WGPUTextureAspect_All;
 
-  ctx.frameViewY = wgpuTextureCreateView(ctx.frameTextureY, &viewDesc);
-  ctx.frameViewU = wgpuTextureCreateView(ctx.frameTextureU, &viewDesc);
-  ctx.frameViewV = wgpuTextureCreateView(ctx.frameTextureV, &viewDesc);
+  ctx.curViewY = wgpuTextureCreateView(ctx.curTextureY, &viewDesc);
+  ctx.curViewU = wgpuTextureCreateView(ctx.curTextureU, &viewDesc);
+  ctx.curViewV = wgpuTextureCreateView(ctx.curTextureV, &viewDesc);
   ctx.prevViewY = wgpuTextureCreateView(ctx.prevTextureY, &viewDesc);
   ctx.prevViewU = wgpuTextureCreateView(ctx.prevTextureU, &viewDesc);
   ctx.prevViewV = wgpuTextureCreateView(ctx.prevTextureV, &viewDesc);
+  ctx.nextViewY = wgpuTextureCreateView(ctx.nextTextureY, &viewDesc);
+  ctx.nextViewU = wgpuTextureCreateView(ctx.nextTextureU, &viewDesc);
+  ctx.nextViewV = wgpuTextureCreateView(ctx.nextTextureV, &viewDesc);
 
   WGPUBindGroupEntry bgEntries[] = {
       {.binding = 0, .sampler = ctx.sampler},
-      {.binding = 1, .textureView = ctx.frameViewY},
-      {.binding = 2, .textureView = ctx.frameViewU},
-      {.binding = 3, .textureView = ctx.frameViewV},
+      {.binding = 1, .textureView = ctx.curViewY},
+      {.binding = 2, .textureView = ctx.curViewU},
+      {.binding = 3, .textureView = ctx.curViewV},
       {.binding = 4, .textureView = ctx.prevViewY},
       {.binding = 5, .textureView = ctx.prevViewU},
       {.binding = 6, .textureView = ctx.prevViewV},
+      {.binding = 7, .textureView = ctx.nextViewY},
+      {.binding = 8, .textureView = ctx.nextViewU},
+      {.binding = 9, .textureView = ctx.nextViewV},
   };
   WGPUBindGroupDescriptor bgDesc = {};
   bgDesc.layout = ctx.bindGroupLayout;
@@ -179,6 +197,15 @@ static void createPipeline() {
        .visibility = WGPUShaderStage_Fragment,
        .texture = textureLayout},
       {.binding = 6,
+       .visibility = WGPUShaderStage_Fragment,
+       .texture = textureLayout},
+      {.binding = 7,
+       .visibility = WGPUShaderStage_Fragment,
+       .texture = textureLayout},
+      {.binding = 8,
+       .visibility = WGPUShaderStage_Fragment,
+       .texture = textureLayout},
+      {.binding = 9,
        .visibility = WGPUShaderStage_Fragment,
        .texture = textureLayout},
   };
@@ -329,17 +356,17 @@ void drawWebGpu(AVFrame *frame) {
       .aspect = WGPUTextureAspect::WGPUTextureAspect_All,
   };
 
-  copyTexture.texture = ctx.frameTextureY;
+  copyTexture.texture = ctx.nextTextureY;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[0],
                         frame->height * frame->linesize[0], &textureDataLayout,
                         &copySize);
 
-  copyTexture.texture = ctx.frameTextureU;
+  copyTexture.texture = ctx.nextTextureU;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[1],
                         frame->height * frame->linesize[1],
                         &textureDataLayoutUv, &copySizeuv);
 
-  copyTexture.texture = ctx.frameTextureV;
+  copyTexture.texture = ctx.nextTextureV;
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[2],
                         frame->height * frame->linesize[2],
                         &textureDataLayoutUv, &copySizeuv);
@@ -355,26 +382,39 @@ void drawWebGpu(AVFrame *frame) {
 
   // current => prev
   WGPUImageCopyTexture copySrc = {
-      .texture = ctx.frameTextureY,
       .mipLevel = 0,
       .origin = origin,
       .aspect = WGPUTextureAspect::WGPUTextureAspect_All,
   };
   WGPUImageCopyTexture copyDst = {
-      .texture = ctx.prevTextureY,
       .mipLevel = 0,
       .origin = origin,
       .aspect = WGPUTextureAspect::WGPUTextureAspect_All,
   };
 
+  copySrc.texture = ctx.curTextureY;
+  copyDst.texture = ctx.prevTextureY;
   wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
                                          &copySize);
-  copySrc.texture = ctx.frameTextureU;
+  copySrc.texture = ctx.curTextureU;
   copyDst.texture = ctx.prevTextureU;
   wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
                                          &copySizeuv);
-  copySrc.texture = ctx.frameTextureV;
+  copySrc.texture = ctx.curTextureV;
   copyDst.texture = ctx.prevTextureV;
+  wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
+                                         &copySizeuv);
+
+  copySrc.texture = ctx.nextTextureY;
+  copyDst.texture = ctx.curTextureY;
+  wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
+                                         &copySize);
+  copySrc.texture = ctx.nextTextureU;
+  copyDst.texture = ctx.curTextureU;
+  wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
+                                         &copySizeuv);
+  copySrc.texture = ctx.nextTextureV;
+  copyDst.texture = ctx.curTextureV;
   wgpuCommandEncoderCopyTextureToTexture(encoder, &copySrc, &copyDst,
                                          &copySizeuv);
 
