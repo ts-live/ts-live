@@ -340,11 +340,7 @@ const Page: NextPage = () => {
 
         `}
       </Script>
-      <Script
-        id='wasm'
-        strategy='lazyOnload'
-        src='/wasm/ffmpeg-sdl2.js'
-      ></Script>
+      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script>
       <Drawer
         anchor='left'
         open={drawer}
