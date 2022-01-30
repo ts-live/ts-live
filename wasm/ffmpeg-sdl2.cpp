@@ -705,7 +705,7 @@ int main() {
   return EXIT_SUCCESS;
 }
 
-EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
+EMSCRIPTEN_BINDINGS(ts_live_module) {
   emscripten::function("getExceptionMsg", &getExceptionMsg);
   emscripten::function("showVersionInfo", &showVersionInfo);
   emscripten::function("setCaptionCallback", &setCaptionCallback);
