@@ -1,5 +1,3 @@
-#include <SDL.h>
-#include <SDL_audio.h>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -15,32 +13,17 @@
 #include <vector>
 
 #include "audio/audioworklet.hpp"
+#include "video/webgpu.hpp"
 
 extern "C" {
 #include <libavcodec/avcodec.h>
-#include <libavfilter/avfilter.h>
-#include <libavfilter/buffersink.h>
-#include <libavfilter/buffersrc.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
-
-void set_yadif_filter(AVFilterContext *ctx);
 }
-
-struct context {
-  SDL_Window *window;
-  SDL_Renderer *renderer;
-  SDL_Texture *texture;
-  SDL_AudioDeviceID dev;
-  size_t textureWidth;
-  size_t textureHeight;
-  int iteration;
-  // std::chrono::system_clock::time_point fpsCounts[FPS_COUNT];
-};
 
 namespace {
 const size_t DEFAULT_WIDTH = 1920;
@@ -57,9 +40,6 @@ size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 
 std::chrono::system_clock::time_point startTime;
-
-// for SDL
-context ctx;
 
 // for libav
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
@@ -79,29 +59,11 @@ std::thread downloaderThread;
 bool resetedDecoder = false;
 bool resetedDownloader = false;
 
-bool doDeinterlace = false;
-
 std::vector<emscripten::val> statsBuffer;
 
 emscripten::val captionCallback = emscripten::val::null();
 emscripten::val statsCallback = emscripten::val::null();
 } // namespace
-
-// clang-format off
-EM_JS(void, set_style, (int width), {
-  const scaleX = 1920 / width;
-  const transform = Module.canvas.style.transform;
-  // Module.canvas.style.aspectRatio = `${width} / 1080`;
-  if (transform.indexOf('scaleX') < 0) {
-    const newTransform = `${transform} scaleX(${1920 / width})`;
-    Module.canvas.style.transform = newTransform;
-  } else {
-    const re = new RegExp('scaleX.([-0-9.]+).');
-    const newTransform = transform.replace(/scaleX.[-0-9.]+./, `scaleX(${1920 / width})`);
-    Module.canvas.style.transform = newTransform;
-  }
-});
-// clang-format on
 
 // utility
 std::string getExceptionMsg(intptr_t ptr) {
@@ -116,9 +78,6 @@ void showVersionInfo() {
 
 void setLogLevelDebug() { spdlog::set_level(spdlog::level::debug); }
 void setLogLevelInfo() { spdlog::set_level(spdlog::level::info); }
-
-// Interlace Setting
-void setDeinterlace(bool deinterlace) { doDeinterlace = deinterlace; }
 
 // Callback register
 void setCaptionCallback(emscripten::val callback) {
@@ -258,9 +217,6 @@ void reset() {
   videoStream = nullptr;
   audioStream = nullptr;
   captionStream = nullptr;
-
-  // SDL Audio
-  SDL_ClearQueuedAudio(ctx.dev);
 }
 
 void playFile(std::string url) {
@@ -284,7 +240,6 @@ void decoderThread() {
   AVCodecContext *audioCodecContext = nullptr;
 
   AVFrame *frame = nullptr;
-  AVFrame *filteredFrame = nullptr;
 
   // probe phase
   {
@@ -355,12 +310,16 @@ void decoderThread() {
         spdlog::error("No audio stream ...");
         return;
       }
-      spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} delay:{}",
+      spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
+                   "colorspace:{}={} colorrange:{}={} delay:{}",
                    videoStream->index, videoStream->codecpar->codec_id,
                    avcodec_get_name(videoStream->codecpar->codec_id),
                    videoStream->codecpar->width, videoStream->codecpar->height,
+                   videoStream->codecpar->color_space,
+                   av_color_space_name(videoStream->codecpar->color_space),
+                   videoStream->codecpar->color_range,
+                   av_color_range_name(videoStream->codecpar->color_range),
                    videoStream->codecpar->video_delay);
-
       spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
                    "sample_rate:{}",
                    audioStream->index, audioStream->codecpar->codec_id,
@@ -436,91 +395,6 @@ void decoderThread() {
     }
   }
 
-  // FilterGraph作成
-  const AVFilter *bufferSource = avfilter_get_by_name("buffer");
-  const AVFilter *bufferSink = avfilter_get_by_name("buffersink");
-  AVFilterInOut *inputs = avfilter_inout_alloc();
-  AVFilterInOut *outputs = avfilter_inout_alloc();
-  AVFilterGraph *filterGraph = avfilter_graph_alloc();
-  AVFilterContext *bufferSinkContext;
-  AVFilterContext *bufferSourceContext;
-  int ret;
-
-  if (!outputs || !inputs || !filterGraph) {
-    spdlog::error("Can't allocate avfilter in/out/filterGraph");
-    return;
-  }
-
-  std::string bufferSourceArgs = fmt::format(
-      "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
-      videoCodecContext->width, videoCodecContext->height,
-      videoCodecContext->pix_fmt, videoStream->time_base.num,
-      videoStream->time_base.den, videoCodecContext->sample_aspect_ratio.num,
-      videoCodecContext->sample_aspect_ratio.den);
-
-  // Buffer video source
-  ret =
-      avfilter_graph_create_filter(&bufferSourceContext, bufferSource, "in",
-                                   bufferSourceArgs.c_str(), NULL, filterGraph);
-  if (ret < 0) {
-    spdlog::error("Can't create buffer source");
-    return;
-  }
-
-  ret = avfilter_graph_create_filter(&bufferSinkContext, bufferSink, "out",
-                                     NULL, NULL, filterGraph);
-  if (ret < 0) {
-    spdlog::error("Can't create buffer sink");
-    return;
-  }
-
-  enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
-
-  ret = av_opt_set_int_list(bufferSinkContext, "pix_fmts", pix_fmts,
-                            AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
-  if (ret < 0) {
-    spdlog::error("Can't set opt buffer sink");
-    return;
-  }
-
-  outputs->name = av_strdup("in");
-  outputs->filter_ctx = bufferSourceContext;
-  outputs->pad_idx = 0;
-  outputs->next = NULL;
-
-  inputs->name = av_strdup("out");
-  inputs->filter_ctx = bufferSinkContext;
-  inputs->pad_idx = 0;
-  inputs->next = NULL;
-
-  std::string filtersDescription = fmt::format("yadif");
-  // std::string filtersDescription = fmt::format("vflip");
-  // std::string filtersDescription = fmt::format("bwdif");
-  ret = avfilter_graph_parse_ptr(filterGraph, filtersDescription.c_str(),
-                                 &inputs, &outputs, NULL);
-  if (ret < 0) {
-    spdlog::error("Can't parse filter Description");
-    avfilter_inout_free(&inputs);
-    avfilter_inout_free(&outputs);
-    return;
-  }
-
-  ret = avfilter_graph_config(filterGraph, NULL);
-  if (ret < 0) {
-    spdlog::error("Can't configure filter Description");
-    avfilter_inout_free(&inputs);
-    avfilter_inout_free(&outputs);
-    return;
-  }
-  avfilter_inout_free(&inputs);
-  avfilter_inout_free(&outputs);
-
-  AVFilterContext *yadifFilterContext =
-      avfilter_graph_get_filter(filterGraph, "Parsed_yadif_0");
-  // spdlog::info("filterGraph Dump: {}", avfilter_graph_dump(filterGraph,
-  // NULL));
-  set_yadif_filter(yadifFilterContext);
-
   // decode phase
   while (!resetedDecoder) {
     if (videoFrameQueue.size() > 180) {
@@ -530,9 +404,6 @@ void decoderThread() {
     // decode frames
     if (frame == nullptr) {
       frame = av_frame_alloc();
-    }
-    if (filteredFrame == nullptr) {
-      filteredFrame = av_frame_alloc();
     }
     AVPacket packet = AVPacket();
     int videoCount = 0;
@@ -581,35 +452,7 @@ void decoderThread() {
         }
         frame->time_base = videoStream->time_base;
 
-        if (doDeinterlace) {
-          // Filterに突っ込む前にPTSを保存する
-          auto pts = frame->pts;
-          // Filterに突っ込む
-          int ret = av_buffersrc_add_frame(bufferSourceContext, frame);
-          if (ret < 0) {
-            spdlog::error("av_buffersrc_add_frame_flags error: {}",
-                          av_err2str(ret));
-          }
-
-          while (true) {
-            int ret = av_buffersink_get_frame(bufferSinkContext, filteredFrame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-              break;
-            }
-            if (ret < 0) {
-              spdlog::error("av_buffersink_get_frame error: {}",
-                            av_err2str(ret));
-            }
-            // PTSを復元
-            filteredFrame->pts = pts;
-            {
-              std::lock_guard<std::mutex> lock(videoFrameMtx);
-              videoFrameFound = true;
-              videoFrameQueue.push_back(av_frame_clone(filteredFrame));
-              av_frame_free(&filteredFrame);
-            }
-          }
-        } else {
+        {
           std::lock_guard<std::mutex> lock(videoFrameMtx);
           videoFrameFound = true;
           videoFrameQueue.push_back(av_frame_clone(frame));
@@ -668,8 +511,6 @@ void decoderThread() {
 
   avio_context_free(&avioContext);
   avformat_free_context(formatContext);
-
-  avfilter_graph_free(&filterGraph);
 }
 
 void mainloop(void *arg) {
@@ -708,28 +549,11 @@ void mainloop(void *arg) {
                   audioFrameQueue.size());
 
     // WindowSize確認＆リサイズ
-    {
-      int ww, wh;
-      SDL_GetWindowSize(ctx.window, &ww, &wh);
-      if (ww != videoStream->codecpar->width ||
-          wh != videoStream->codecpar->height) {
-        SDL_SetWindowSize(ctx.window, videoStream->codecpar->width,
-                          videoStream->codecpar->height);
-        set_style(videoStream->codecpar->width);
-      }
-    }
-
-    // Textureとサイズ合わせ
-    if (currentFrame->width != ctx.textureWidth ||
-        currentFrame->height != ctx.textureHeight) {
-      SDL_DestroyTexture(ctx.texture);
-      ctx.texture =
-          SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
-                            SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
-                            currentFrame->width, currentFrame->height);
-      ctx.textureWidth = currentFrame->width;
-      ctx.textureHeight = currentFrame->height;
-    }
+    // TODO:
+    // if (ww != videoStream->codecpar->width ||
+    //     wh != videoStream->codecpar->height) {
+    //   set_style(videoStream->codecpar->width);
+    // }
 
     // AudioFrameは完全に見るだけ
     AVFrame *audioFrame = audioFrameQueue.front();
@@ -755,22 +579,58 @@ void mainloop(void *arg) {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         videoFrameQueue.pop_front();
       }
-      int bufferSize = av_image_get_buffer_size(
-          (AVPixelFormat)currentFrame->format, currentFrame->width,
-          currentFrame->height, 1);
-      uint8_t *buf;
-      int pitch;
-      SDL_LockTexture(ctx.texture, NULL, reinterpret_cast<void **>(&buf),
-                      &pitch);
-      av_image_copy_to_buffer(buf, bufferSize, currentFrame->data,
-                              currentFrame->linesize,
-                              (AVPixelFormat)currentFrame->format,
-                              currentFrame->width, currentFrame->height, 1);
-      SDL_UnlockTexture(ctx.texture);
-      av_frame_free(&currentFrame);
+      double timestamp =
+          currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
 
-      SDL_RenderCopy(ctx.renderer, ctx.texture, NULL, NULL);
-      SDL_RenderPresent(ctx.renderer);
+      // // clang-format off
+      // EM_ASM({
+      //   if (Module.canvas.width != $0 || Module.canvas.height != $1) {
+      //     Module.canvas.width = $0;
+      //     Module.canvas.height = $1;
+      //     const scaleX = 1920 / $0;
+      //     const transform = Module.canvas.style.transform;
+      //     if (transform.indexOf('scaleX') < 0) {
+      //       const newTransform = `${transform} scaleX(${1920 / $0})`;
+      //       Module.canvas.style.transform = newTransform;
+      //     } else {
+      //       const re = new RegExp('scaleX.([-0-9.]+).');
+      //       const newTransform = transform.replace(/scaleX.[-0-9.]+./,
+      //       `scaleX(${1920 / $0})`); Module.canvas.style.transform =
+      //       newTransform;
+      //     }
+      //   }
+      // }, currentFrame->width, currentFrame->height);
+      // EM_ASM({
+      //   const videoFrame = new VideoFrame(HEAPU8, {
+      //     format: "I420",
+      //     layout: [
+      //       {
+      //         offset: $1,
+      //         stride: $2
+      //       },
+      //       {
+      //         offset: $3,
+      //         stride: $4
+      //       },
+      //       {
+      //         offset: $5,
+      //         stride: $6
+      //       }
+      //     ],
+      //     codedWidth: Module.canvas.width,
+      //     codedHeight: Module.canvas.height,
+      //     timestamp: $0
+      //   });
+      //   Module.canvasCtx.drawImage(videoFrame, 0, 0);
+      //   videoFrame.close();
+      // }, timestamp,
+      //   currentFrame->data[0], currentFrame->linesize[0],
+      //   currentFrame->data[1], currentFrame->linesize[1],
+      //   currentFrame->data[2], currentFrame->linesize[2]);
+      // // clang-format on
+      drawWebGpu(currentFrame);
+
+      av_frame_free(&currentFrame);
     }
   }
 
@@ -815,32 +675,6 @@ int main() {
   spdlog::info("Wasm main() started.");
   startTime = std::chrono::system_clock::now();
 
-  // SDL初期化
-  SDL_Init(SDL_INIT_VIDEO);
-
-  // Disable Keyboard handling
-  // https://github.com/emscripten-core/emscripten/issues/3621
-  SDL_EventState(SDL_TEXTINPUT, SDL_DISABLE);
-  SDL_EventState(SDL_KEYDOWN, SDL_DISABLE);
-  SDL_EventState(SDL_KEYUP, SDL_DISABLE);
-
-  ctx.dev = 0;
-
-  ctx.window = SDL_CreateWindow("video", SDL_WINDOWPOS_UNDEFINED,
-                                SDL_WINDOWPOS_UNDEFINED, DEFAULT_WIDTH,
-                                DEFAULT_HEIGHT, SDL_WINDOW_SHOWN);
-
-  set_style(DEFAULT_WIDTH);
-
-  ctx.renderer = SDL_CreateRenderer(ctx.window, -1, 0);
-  ctx.texture =
-      SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_IYUV,
-                        SDL_TextureAccess::SDL_TEXTUREACCESS_STREAMING,
-                        DEFAULT_WIDTH, DEFAULT_HEIGHT);
-  ctx.iteration = 0;
-  ctx.textureWidth = DEFAULT_WIDTH;
-  ctx.textureHeight = DEFAULT_HEIGHT;
-
   auto now = std::chrono::system_clock::now();
 
   // デコーダスレッド起動
@@ -851,6 +685,9 @@ int main() {
       decoderThread();
     }
   });
+
+  // WebGPU起動
+  initWebGpu();
 
   // AudioWorklet起動
   startAudioWorklet();
@@ -874,7 +711,6 @@ EMSCRIPTEN_BINDINGS(ffmpeg_sdl2_module) {
   emscripten::function("setCaptionCallback", &setCaptionCallback);
   emscripten::function("setStatsCallback", &setStatsCallback);
   emscripten::function("playFile", &playFile);
-  emscripten::function("setDeinterlace", &setDeinterlace);
   emscripten::function("getNextInputBuffer", &getNextInputBuffer);
   emscripten::function("commitInputData", &commitInputData);
   emscripten::function("reset", &reset);
