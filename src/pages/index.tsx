@@ -406,7 +406,7 @@ const Page: NextPage = () => {
               font-size: 19px;
             `}
           >
-            Web-TS-Player
+            {'TS-Live!'}
           </div>
           <div
             css={css`
