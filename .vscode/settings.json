@@ -17,6 +17,8 @@
         "*.tcc": "cpp",
         "bitset": "cpp",
         "*.idl": "cpp",
-        "fstream": "cpp"
+        "fstream": "cpp",
+        "format": "cpp",
+        "string_view": "cpp"
     }
 }
