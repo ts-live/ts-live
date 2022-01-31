@@ -81,6 +81,10 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
+  const [showCaption, setShowCaption] = useLocalStorage<boolean>(
+    'tsplayerShowCaption',
+    false
+  )
 
   const wasmMouduleState = useAsync(async () => {
     const mod = await new Promise<WasmModule>(resolve => {
@@ -541,6 +545,21 @@ const Page: NextPage = () => {
               <FormControlLabel
                 control={
                   <Checkbox
+                    checked={showCaption}
+                    onChange={ev => {
+                      setShowCaption(ev.target.checked)
+                    }}
+                  ></Checkbox>
+                }
+                label='字幕を表示する'
+              ></FormControlLabel>
+            </FormGroup>
+          </div>
+          <div>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
                     checked={showCharts}
                     onChange={ev => {
                       setShowCharts(ev.target.checked)
@@ -585,11 +604,22 @@ const Page: NextPage = () => {
             transform: 'translate(-50%, -50%)'
           }}
         ></canvas>
-        <Caption
-          wasmModule={wasmMouduleState.value}
-          width={1920}
-          height={1080}
-        ></Caption>
+        <div hidden={!showCaption}>
+          <Caption
+            wasmModule={wasmMouduleState.value}
+            width={1920}
+            height={1080}
+          ></Caption>
+        </div>
+        <div
+          css={css`
+            position: absolute;
+            z-index: 3;
+            width: 100%;
+            height: 100%;
+          `}
+          onClick={() => setDrawer(true)}
+        ></div>
         <div
           css={css`
             display: ${showCharts ? 'flex' : 'none'};
