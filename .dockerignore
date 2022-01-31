@@ -1,0 +1,10 @@
+.next/
+node_modules/
+wasm/build/
+build/
+out/
+.github/
+public/data/
+.vscode/
+Dockerfile
+README.md
