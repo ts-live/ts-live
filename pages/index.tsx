@@ -19,7 +19,7 @@ import {
 } from '@mui/material'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
-import { WasmModule, StatsData } from '../lib/wasm/wasmlib'
+import { WasmModule, StatsData } from '../lib/wasmmodule'
 import dayjs from 'dayjs'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
