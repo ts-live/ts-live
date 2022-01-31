@@ -1,6 +1,7 @@
 /** @jsxImportSource @emotion/react */
 import { css } from '@emotion/react'
 import { NextPage } from 'next'
+import dynamic from 'next/dynamic'
 import Script from 'next/script'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAsync, useLocalStorage } from 'react-use'
@@ -18,24 +19,9 @@ import {
 } from '@mui/material'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
+import { Module, StatsData } from '../lib/wasmmodule'
 
-declare interface WasmModule extends EmscriptenModule {
-  getExceptionMsg(ex: number): string
-  setLogLevelDebug(): void
-  setLogLevelInfo(): void
-  showVersionInfo(): void
-  setCaptionCallback(
-    callback: (pts: number, ptsTime: number, captionData: Uint8Array) => void
-  ): void
-  setStatsCallback(
-    callback: ((statsDataList: Array<StatsData>) => void) | null
-  ): void
-  playFile(url: string): void
-  getNextInputBuffer(size: number): Uint8Array
-  commitInputData(size: number): void
-  reset(): void
-}
-declare var Module: WasmModule
+const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
 declare interface TvService {
   id: number
@@ -43,14 +29,6 @@ declare interface TvService {
   serviceId: number
   networkId: number
   hasLogoData: boolean
-}
-
-declare interface StatsData {
-  time: number
-  VideoFrameQueueSize: number
-  AudioFrameQueueSize: number
-  SDLQueuedAudioSize: number
-  InputBufferSize: number
 }
 
 declare interface EpgRecordedFile {
@@ -102,67 +80,13 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
-  const captionCanvasRef = useRef<HTMLCanvasElement>(null)
-  const [currentSubtitle, setCurrentSubtitle] = useState<Uint8Array>()
 
-  const canvasProviderState = useAsync(async () => {
-    const CanvasProvider = await import('aribb24.js').then(
-      mod => mod.CanvasProvider
-    )
-    return CanvasProvider
-  })
-
-  const captionCallback = useCallback(
-    (pts: number, ptsTime: number, captionData: Uint8Array) => {
-      const start = performance.now()
-      const data = captionData.slice()
-      const canvas = captionCanvasRef.current
-      if (!canvas) return
-      const context = canvas.getContext('2d')
-      if (!context) return
-      if (!canvasProviderState.value) {
-        console.log('canvasProvider not loaded', canvasProviderState.error)
-        return
-      }
-
-      const CanvasProvider = canvasProviderState.value
-
-      // if (!aribSubtitleData) {
-      //   context.clearRect(0, 0, canvas.width, canvas.height)
-      //   setDisplayingAribSubtitleData(null)
-      //   return
-      // }
-
-      const provider = new CanvasProvider(data, ptsTime)
-      const estimate = provider.render()
-      if (!estimate) return
-      console.log('estimate', estimate, pts, ptsTime, data)
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
-      // const font = setting.font || SUBTITLE_DEFAULT_FONT
-      const font = `"Rounded M+ 1m for ARIB"`
-      const timer = setTimeout(() => {
-        const result = provider.render({
-          canvas,
-          useStroke: true,
-          keepAspectRatio: true,
-          normalFont: font,
-          gaijiFont: font,
-          drcsReplacement: true
-        })
-        const end = performance.now()
-        console.log('result', result, end - start)
-        setCurrentSubtitle(data)
-        if (estimate.endTime === Number.POSITIVE_INFINITY) return
-        setTimeout(() => {
-          if (currentSubtitle !== data) return
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          setCurrentSubtitle(undefined)
-        }, (estimate.endTime - estimate.startTime) * 1000)
-      }, estimate.startTime * 1000)
-    },
-    []
-  )
+  // const canvasProviderState = useAsync(async () => {
+  //   const CanvasProvider = await import('aribb24.js').then(
+  //     mod => mod.CanvasProvider
+  //   )
+  //   return CanvasProvider
+  // })
 
   const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
     setChartData(prev => {
@@ -284,7 +208,6 @@ const Page: NextPage = () => {
     } else {
       Module.setStatsCallback(null)
     }
-    Module.setCaptionCallback(captionCallback)
 
     // 再生スタート
     if (playMode === 'live') {
@@ -382,17 +305,19 @@ const Page: NextPage = () => {
         {originTrialToken !== undefined ? (
           <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
         ) : null}
+        <script type='text/javascript'>var Module = {};</script>
+        <script src='/wasm/ts-live.js'></script>
       </Head>
-      <Script id='setupModule' strategy='lazyOnload'>
+      {/* <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
               // canvas: (function () { return document.getElementById('video'); })(),
-              captionCanvas: (function () { return document.getElementById('caption'); })(),
+              // captionCanvas: (function () { return document.getElementById('caption'); })(),
             };
 
         `}
       </Script>
-      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script>
+      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script> */}
       <Drawer
         anchor='left'
         open={drawer}
@@ -633,7 +558,7 @@ const Page: NextPage = () => {
             transform: 'translate(-50%, -50%)'
           }}
         ></canvas>
-        <canvas
+        <Caption
           css={css`
             position: absolute;
             top: 50%;
@@ -642,12 +567,7 @@ const Page: NextPage = () => {
             max-height: 100%;
             transform: translate(-50%, -50%);
           `}
-          id='caption'
-          ref={captionCanvasRef}
-          width={1920}
-          height={1080}
-          onClick={() => setDrawer(true)}
-        ></canvas>
+        ></Caption>
         <div
           css={css`
             display: ${showCharts ? 'flex' : 'none'};
