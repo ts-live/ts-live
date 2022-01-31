@@ -4,7 +4,7 @@ import { NextPage } from 'next'
 import dynamic from 'next/dynamic'
 import Script from 'next/script'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAsync, useLocalStorage } from 'react-use'
+import { useAsync, useKey, useLocalStorage } from 'react-use'
 import {
   Box,
   Checkbox,
@@ -302,24 +302,29 @@ const Page: NextPage = () => {
     playMode
   ])
 
-  useHotkeys('s', () => {
-    console.log('Hotkey s pressed!!!')
-    if (!videoCanvasRef.current || !captionCanvasRef.current) return
-    const video = videoCanvasRef.current
-    const caption = captionCanvasRef.current
-    const canvas = document.createElement('canvas')
-    canvas.width = video.width
-    canvas.height = video.height
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(video, 0, 0)
-    if (showCaption) {
-      ctx.drawImage(caption, 0, 0)
-    }
-    const a = document.createElement('a')
-    a.href = canvas.toDataURL('image/png')
-    a.download = `${dayjs().format('YYYYMMDD-HHmmss_SSS')}.png`
-    a.click()
-  })
+  useKey(
+    's',
+    () => {
+      console.log('Hotkey s pressed!!!')
+      if (!videoCanvasRef.current || !captionCanvasRef.current) return
+      const video = videoCanvasRef.current
+      const caption = captionCanvasRef.current
+      const canvas = document.createElement('canvas')
+      canvas.width = video.width
+      canvas.height = video.height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(video, 0, 0)
+      if (showCaption) {
+        ctx.drawImage(caption, 0, 0)
+      }
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/png')
+      a.download = `${dayjs().format('YYYYMMDD-HHmmss_SSS')}.png`
+      a.click()
+    },
+    {},
+    [showCaption]
+  )
 
   const getServicesOptions = useCallback(() => {
     return tvServices.map((service, idx) => {
