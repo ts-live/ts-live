@@ -125,6 +125,7 @@ const Page: NextPage = () => {
   }, [])
 
   useEffect(() => {
+    if (!mirakurunServer) return
     fetch(`${mirakurunServer}/api/version`)
       .then(response => {
         if (response.ok && response.body !== null) {
@@ -141,7 +142,7 @@ const Page: NextPage = () => {
   }, [mirakurunServer])
 
   useEffect(() => {
-    if (!mirakurunOk) {
+    if (!mirakurunServer) {
       return
     }
     fetch(`${mirakurunServer}/api/services`).then(response => {
@@ -172,6 +173,7 @@ const Page: NextPage = () => {
   }, [mirakurunOk, mirakurunServer])
 
   useEffect(() => {
+    if (!epgStationServer) return
     fetch(`${epgStationServer}/api/version`)
       .then(response => {
         if (response.ok && response.body !== null) {
@@ -188,6 +190,7 @@ const Page: NextPage = () => {
   }, [epgStationServer])
 
   useEffect(() => {
+    if (!epgStationServer) return
     fetch(
       `${epgStationServer}/api/recorded?isHalfWidth=false&offset=0&limit=30`
     )
@@ -215,9 +218,16 @@ const Page: NextPage = () => {
   useEffect(() => {
     if (!touched) {
       // first gestureまでは再生しない
+      console.log('not touched')
       return
     }
     if (!mirakurunOk || !mirakurunServer || !activeService) {
+      console.log(
+        'mirakurunServer or activeService',
+        mirakurunOk,
+        mirakurunServer,
+        activeService
+      )
       return
     }
     if (
