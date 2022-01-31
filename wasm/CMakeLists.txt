@@ -102,6 +102,8 @@ target_link_options(ts-live PRIVATE
   "SHELL:-s FETCH=1"
   "SHELL:-s TOTAL_MEMORY=39321600"
   "SHELL:-s ENVIRONMENT=web,worker"
+  "SHELL:-s MODULARIZE=1 -s EXPORT_NAME=createWasmModule"
+  # "SHELL:-s EXPORT_ES6=1"
   "SHELL:-s ASYNCIFY=1"
   # "SHELL:-s EXPORTED_FUNCTIONS='[\"_main\"]'"
   # "SHELL:-s EXPORTED_RUNTIME_METHODS='[\"ccall\"]'"

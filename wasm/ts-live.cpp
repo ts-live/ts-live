@@ -668,7 +668,7 @@ void mainloop(void *arg) {
 
     av_frame_free(&frame);
   }
-  if (!captionCallback.isNull()) {
+  if (!captionCallback.isNull() && !audioFrameQueue.empty()) {
     while (captionDataQueue.size() > 0) {
       auto p = captionDataQueue.front();
       double pts = (double)p.first;
@@ -695,7 +695,7 @@ void mainloop(void *arg) {
 
       auto data = emscripten::val(
           emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
-      captionCallback(pts, ptsTime - audioPtsTime, data);
+      captionCallback(pts, ptsTime - estimatedAudioPlayTime, data);
     }
   }
 }

@@ -20,6 +20,7 @@ import {
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 import { Module, StatsData } from '../lib/wasmmodule'
+import { createWasmModule, WasmModule } from '../lib/wasm/wasmlib'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
@@ -80,6 +81,24 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
+
+  const wasmMouduleState = useAsync(async () => {
+    const mod = await new Promise<WasmModule>(resolve => {
+      const script = document.createElement('script')
+      script.onload = () => {
+        console.log('onload', window['createWasmModule'])
+        window['createWasmModule']().then(m => {
+          console.log('then', m)
+          resolve(m)
+        })
+      }
+      script.src = '/wasm/ts-live.js'
+      document.head.appendChild(script)
+      console.log('script element created')
+    })
+    console.log('mod', mod)
+    return mod
+  }, [])
 
   // const canvasProviderState = useAsync(async () => {
   //   const CanvasProvider = await import('aribb24.js').then(
@@ -195,6 +214,15 @@ const Page: NextPage = () => {
     if (!mirakurunOk || !mirakurunServer || !activeService) {
       return
     }
+    if (
+      wasmMouduleState.loading ||
+      wasmMouduleState.error ||
+      !wasmMouduleState.value
+    ) {
+      console.log('WasmModule not loaded', wasmMouduleState.error)
+      return
+    }
+    const Module = wasmMouduleState.value
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
 
@@ -305,8 +333,6 @@ const Page: NextPage = () => {
         {originTrialToken !== undefined ? (
           <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
         ) : null}
-        <script type='text/javascript'>var Module = {};</script>
-        <script src='/wasm/ts-live.js'></script>
       </Head>
       {/* <Script id='setupModule' strategy='lazyOnload'>
         {`
@@ -546,6 +572,7 @@ const Page: NextPage = () => {
             left: 50%;
             max-width: 100%;
             max-height: 100%;
+            z-index: 1;
           `}
           id='video'
           tabIndex={-1}
@@ -559,14 +586,9 @@ const Page: NextPage = () => {
           }}
         ></canvas>
         <Caption
-          css={css`
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            max-width: 100%;
-            max-height: 100%;
-            transform: translate(-50%, -50%);
-          `}
+          wasmModule={wasmMouduleState.value}
+          width={1920}
+          height={1080}
         ></Caption>
         <div
           css={css`
