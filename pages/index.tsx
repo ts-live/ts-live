@@ -1,9 +1,10 @@
 /** @jsxImportSource @emotion/react */
 import { css } from '@emotion/react'
 import { NextPage } from 'next'
+import dynamic from 'next/dynamic'
 import Script from 'next/script'
-import { useCallback, useEffect, useState } from 'react'
-import { useLocalStorage } from 'react-use'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAsync, useLocalStorage } from 'react-use'
 import {
   Box,
   Checkbox,
@@ -18,22 +19,10 @@ import {
 } from '@mui/material'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
+import { Module, StatsData } from '../lib/wasmmodule'
+import { createWasmModule, WasmModule } from '../lib/wasm/wasmlib'
 
-declare interface WasmModule extends EmscriptenModule {
-  getExceptionMsg(ex: number): string
-  setLogLevelDebug(): void
-  setLogLevelInfo(): void
-  showVersionInfo(): void
-  setCaptionCallback(callback: (captionData: Uint8Array) => void): void
-  setStatsCallback(
-    callback: ((statsDataList: Array<StatsData>) => void) | null
-  ): void
-  playFile(url: string): void
-  getNextInputBuffer(size: number): Uint8Array
-  commitInputData(size: number): void
-  reset(): void
-}
-declare var Module: WasmModule
+const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
 declare interface TvService {
   id: number
@@ -41,14 +30,6 @@ declare interface TvService {
   serviceId: number
   networkId: number
   hasLogoData: boolean
-}
-
-declare interface StatsData {
-  time: number
-  VideoFrameQueueSize: number
-  AudioFrameQueueSize: number
-  SDLQueuedAudioSize: number
-  InputBufferSize: number
 }
 
 declare interface EpgRecordedFile {
@@ -100,6 +81,34 @@ const Page: NextPage = () => {
     }
   ])
   const [showCharts, setShowCharts] = useState<boolean>(false)
+  const [showCaption, setShowCaption] = useLocalStorage<boolean>(
+    'tsplayerShowCaption',
+    false
+  )
+
+  const wasmMouduleState = useAsync(async () => {
+    const mod = await new Promise<WasmModule>(resolve => {
+      const script = document.createElement('script')
+      script.onload = () => {
+        ;(window as any).createWasmModule().then((m: WasmModule) => {
+          console.log('then', m)
+          resolve(m)
+        })
+      }
+      script.src = '/wasm/ts-live.js'
+      document.head.appendChild(script)
+      console.log('script element created')
+    })
+    console.log('mod', mod)
+    return mod
+  }, [])
+
+  // const canvasProviderState = useAsync(async () => {
+  //   const CanvasProvider = await import('aribb24.js').then(
+  //     mod => mod.CanvasProvider
+  //   )
+  //   return CanvasProvider
+  // })
 
   const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
     setChartData(prev => {
@@ -208,6 +217,15 @@ const Page: NextPage = () => {
     if (!mirakurunOk || !mirakurunServer || !activeService) {
       return
     }
+    if (
+      wasmMouduleState.loading ||
+      wasmMouduleState.error ||
+      !wasmMouduleState.value
+    ) {
+      console.log('WasmModule not loaded', wasmMouduleState.error)
+      return
+    }
+    const Module = wasmMouduleState.value
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
 
@@ -319,15 +337,16 @@ const Page: NextPage = () => {
           <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
         ) : null}
       </Head>
-      <Script id='setupModule' strategy='lazyOnload'>
+      {/* <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
               // canvas: (function () { return document.getElementById('video'); })(),
+              // captionCanvas: (function () { return document.getElementById('caption'); })(),
             };
 
         `}
       </Script>
-      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script>
+      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script> */}
       <Drawer
         anchor='left'
         open={drawer}
@@ -525,6 +544,21 @@ const Page: NextPage = () => {
               <FormControlLabel
                 control={
                   <Checkbox
+                    checked={showCaption}
+                    onChange={ev => {
+                      setShowCaption(ev.target.checked)
+                    }}
+                  ></Checkbox>
+                }
+                label='字幕を表示する'
+              ></FormControlLabel>
+            </FormGroup>
+          </div>
+          <div>
+            <FormGroup>
+              <FormControlLabel
+                control={
+                  <Checkbox
                     checked={showCharts}
                     onChange={ev => {
                       setShowCharts(ev.target.checked)
@@ -556,6 +590,7 @@ const Page: NextPage = () => {
             left: 50%;
             max-width: 100%;
             max-height: 100%;
+            z-index: 1;
           `}
           id='video'
           tabIndex={-1}
@@ -568,6 +603,23 @@ const Page: NextPage = () => {
             transform: 'translate(-50%, -50%)'
           }}
         ></canvas>
+        <div hidden={!showCaption}>
+          <Caption
+            service={activeService}
+            wasmModule={wasmMouduleState.value}
+            width={1920}
+            height={1080}
+          ></Caption>
+        </div>
+        <div
+          css={css`
+            position: absolute;
+            z-index: 3;
+            width: 100%;
+            height: 100%;
+          `}
+          onClick={() => setDrawer(true)}
+        ></div>
         <div
           css={css`
             display: ${showCharts ? 'flex' : 'none'};
@@ -620,6 +672,24 @@ const Page: NextPage = () => {
               dataKey='AudioFrameQueueSize'
               name='Audio Queue Size'
               stroke='#82ca9d'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='CaptionDataQueueSize'
+              name='Caption Data Size'
+              stroke='#9dca82'
               isAnimationActive={false}
               dot={false}
             />
