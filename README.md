@@ -2,9 +2,9 @@
 
 ブラウザで mirakurun の MPEGTS ストリームを直接再生する実験的 Web アプリ
 
-## LICENSE
+## ライセンス
 
-MIT-License（内部で利用している ffmpeg は LGPL です）
+MIT-License（内部で利用している ffmpeg は LGPL です。他にも多数のライブラリを使っているので個別に確認してください）
 
 ## run
 
@@ -13,7 +13,7 @@ $ yarn
 $ yarn dev
 ```
 
-起動するポートはメッセージを参照
+3000 番ポートで起動したことをメッセージで確認すること（3000 じゃないときはどこかで別のアプリが 3000 を開いてます）。
 
 ## 操作方法
 
@@ -27,7 +27,7 @@ $ yarn dev
 - mixed content の関係で mirakurun サーバと http/https 混在は出来ない
 - [WebGPU](https://chromestatus.com/feature/6213121689518080) を使っているため、localhost:3000 以外で起動するには Origin Trials キーの取得・設定が必要
 
-上記 2 制約から、「http://localhostでアクセスしてmirakurunにhttp接続」または「httpsサーバに接続してmirakurunにもhttps接続」のどちらかでないと動きません。
+上記の上 2 つの制約から、「http://localhostでアクセスしてmirakurunにhttp接続」または「httpsサーバに接続してmirakurunにもhttps接続」のどちらかでないと動きません。localhost:3000 以外（https 接続する場合）では Origin Trials キーを取得＆設定するか、ブラウザ起動時にコマンドライン引数をつける必要があります。
 
 ## ファイル再生機能
 
