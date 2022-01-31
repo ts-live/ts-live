@@ -21,7 +21,7 @@ import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 import { WasmModule, StatsData } from '../lib/wasm/wasmlib'
 import { useHotkeys } from 'react-hotkeys-hook'
-import dateFormat from 'dateformat'
+import dayjs from 'dayjs'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
@@ -317,7 +317,7 @@ const Page: NextPage = () => {
     }
     const a = document.createElement('a')
     a.href = canvas.toDataURL('image/png')
-    a.download = `${dateFormat(new Date(), 'yyyymmdd-HHMMss_l')}.png`
+    a.download = `${dayjs().format('YYYYMMDD-HHmmss_SSS')}.png`
     a.click()
   })
 
