@@ -88,7 +88,7 @@ add_dependencies(ts-live ffmpeg)
 target_compile_options(ts-live PUBLIC -matomics -mbulk-memory)
 target_compile_features(ts-live PRIVATE cxx_std_20)
 target_include_directories(ts-live PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
-target_link_libraries(ts-live fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES})
+target_link_libraries(ts-live fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} embind)
 target_link_options(ts-live PRIVATE
   "-Wno-pthreads-mem-growth"
   "SHELL:-s ALLOW_MEMORY_GROWTH=1"
@@ -107,7 +107,7 @@ target_link_options(ts-live PRIVATE
   "SHELL:-s ASYNCIFY=1"
   # "SHELL:-s EXPORTED_FUNCTIONS='[\"_main\"]'"
   # "SHELL:-s EXPORTED_RUNTIME_METHODS='[\"ccall\"]'"
-  "SHELL:--bind"
+  # "SHELL:--bind"
   "SHELL:-s DISABLE_DEPRECATED_FIND_EVENT_TARGET_BEHAVIOR=0"
   "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/audio/processor.js@/processor.js"
   "SHELL:--embed-file ${CMAKE_CURRENT_SOURCE_DIR}/video/shaders@/shaders"

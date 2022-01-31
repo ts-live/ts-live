@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState
 } from 'react'
-import { WasmModule } from '../lib/wasm/wasmlib'
+import { WasmModule } from '../lib/wasmmodule'
 import { CanvasProvider } from 'aribb24.js'
 
 type Props = {
