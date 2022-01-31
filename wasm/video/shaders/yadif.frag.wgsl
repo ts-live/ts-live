@@ -1,13 +1,14 @@
 [[group(0), binding(0)]] var mySampler : sampler;
-[[group(0), binding(1)]] var currentY : texture_2d<f32>;
-[[group(0), binding(2)]] var currentU : texture_2d<f32>;
-[[group(0), binding(3)]] var currentV : texture_2d<f32>;
-[[group(0), binding(4)]] var prevY : texture_2d<f32>;
-[[group(0), binding(5)]] var prevU : texture_2d<f32>;
-[[group(0), binding(6)]] var prevV : texture_2d<f32>;
-[[group(0), binding(7)]] var nextY : texture_2d<f32>;
-[[group(0), binding(8)]] var nextU : texture_2d<f32>;
-[[group(0), binding(9)]] var nextV : texture_2d<f32>;
+[[group(0), binding(1)]] var outputFrame :  texture_storage_2d<rgba8unorm, write>;
+[[group(0), binding(2)]] var currentY : texture_2d<f32>;
+[[group(0), binding(3)]] var currentU : texture_2d<f32>;
+[[group(0), binding(4)]] var currentV : texture_2d<f32>;
+[[group(0), binding(5)]] var prevY : texture_2d<f32>;
+[[group(0), binding(6)]] var prevU : texture_2d<f32>;
+[[group(0), binding(7)]] var prevV : texture_2d<f32>;
+[[group(0), binding(8)]] var nextY : texture_2d<f32>;
+[[group(0), binding(9)]] var nextU : texture_2d<f32>;
+[[group(0), binding(10)]] var nextV : texture_2d<f32>;
 
 fn to_coord(tex: texture_2d<f32>, fragUV: vec2<f32>) -> vec2<i32> {
   var dim = textureDimensions(tex);
@@ -55,8 +56,7 @@ fn bordered(x_: i32, y_: i32, dim: vec2<i32>) -> vec2<i32> {
   return vec2<i32>(x, y);
 }
 
-fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, fragUV: vec2<f32>) -> f32 {
-  var coord = to_coord(cur, fragUV);
+fn yadif_coord(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coord: vec2<i32>) -> f32 {
   var dim = textureDimensions(cur);
   var x = coord[0];
   var y = coord[1];
@@ -129,11 +129,29 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, fra
   }
 }
 
-
-[[stage(fragment)]]
-fn main([[location(0)]] fragUV : vec2<f32>) -> [[location(0)]] vec4<f32> {
-  var y = (yadif(currentY, prevY, nextY, fragUV) - 16.0 / 255.0);
-  var u = (yadif(currentU, prevU, nextU, fragUV) - 128.0 / 255.0);
-  var v = (yadif(currentV, prevV, nextV, fragUV) - 128.0 / 255.0);
-  return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
+fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, fragUV: vec2<f32>) -> f32 {
+  var coord = to_coord(cur, fragUV);
+  return yadif_coord(cur, prev, next, coord);
 }
+
+[[stage(compute), workgroup_size(32, 8, 1)]]
+fn main(
+  [[builtin(global_invocation_id)]] coord3: vec3<u32>
+) {
+  var coord = vec2<i32>(i32(coord3[0]), i32(coord3[1]));
+  var coord2 = vec2<i32>(i32(coord3[0] / 2u), i32(coord3[1] / 2u));
+  var y = yadif_coord(currentY, prevY, nextY, coord) - 16.0 / 255.0;
+  var u = yadif_coord(currentU, prevU, nextU, coord2) - 128.0 / 255.0;
+  var v = yadif_coord(currentV, prevV, nextV, coord2) - 128.0 / 255.0;
+  var rgba = vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
+  textureStore(outputFrame, coord, rgba);
+}
+
+
+// [[stage(fragment)]]
+// fn main([[location(0)]] fragUV : vec2<f32>) -> [[location(0)]] vec4<f32> {
+//   var y = (yadif(currentY, prevY, nextY, fragUV) - 16.0 / 255.0);
+//   var u = (yadif(currentU, prevU, nextU, fragUV) - 128.0 / 255.0);
+//   var v = (yadif(currentV, prevV, nextV, fragUV) - 128.0 / 255.0);
+//   return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
+// }
