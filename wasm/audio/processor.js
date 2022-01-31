@@ -4,6 +4,7 @@ class AudioFeederProcessor extends AudioWorkletProcessor {
   processCallCount = 0
   buffers0 = new Array(0)
   buffers1 = new Array(0)
+  started = false
   constructor (...args) {
     super(...args)
     this.port.onmessage = e => {
@@ -18,11 +19,15 @@ class AudioFeederProcessor extends AudioWorkletProcessor {
   process (inputs, outputs, parameters) {
     const output = outputs[0]
 
-    if (this.buffers0.length == 0) {
+    if (
+      this.buffers0.length == 0 ||
+      (!this.started && this.bufferedSamples < 48000 / 2)
+    ) {
       output[0].fill(0)
       output[1].fill(0)
       return true
     }
+    this.started = true
 
     const buffer0 = this.buffers0[0]
     const buffer1 = this.buffers1[0]

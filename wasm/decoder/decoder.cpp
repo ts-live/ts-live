@@ -43,6 +43,10 @@ std::deque<std::pair<int64_t, std::vector<uint8_t>>> captionDataQueue;
 std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
 
+std::deque<AVPacket *> videoPacketQueue, audioPacketQueue;
+std::mutex videoPacketMtx, audioPacketMtx;
+std::condition_variable videoPacketCv, audioPacketCv;
+
 AVStream *videoStream = nullptr;
 AVStream *audioStream = nullptr;
 AVStream *captionStream = nullptr;
@@ -104,6 +108,104 @@ void commitInputData(size_t nextSize) {
   std::lock_guard<std::mutex> lock(inputBufferMtx);
   inputBufferWriteIndex += nextSize;
   waitCv.notify_all();
+}
+
+void videoDecoderThreadFunc(AVCodecContext *videoCodecContext) {
+  AVFrame *frame = av_frame_alloc();
+
+  while (!resetedDecoder) {
+    AVPacket *ppacket;
+    {
+      std::unique_lock<std::mutex> lock(videoPacketMtx);
+      videoPacketCv.wait(lock, [&] { return !videoPacketQueue.empty(); });
+      ppacket = videoPacketQueue.front();
+      videoPacketQueue.pop_front();
+    }
+    AVPacket &packet = *ppacket;
+
+    int ret = avcodec_send_packet(videoCodecContext, &packet);
+    if (ret != 0) {
+      spdlog::error("avcodec_send_packet(video) failed: {} {}", ret,
+                    av_err2str(ret));
+      // return;
+    }
+    while (avcodec_receive_frame(videoCodecContext, frame) == 0) {
+      const AVPixFmtDescriptor *desc =
+          av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
+      int bufferSize = av_image_get_buffer_size((AVPixelFormat)frame->format,
+                                                frame->width, frame->height, 1);
+      spdlog::debug("VideoFrame: {}x{}x{} pixfmt:{} key:{} interlace:{} "
+                    "tff:{} codecContext->field_order:{} pts:{} "
+                    "stream.timebase:{} bufferSize:{}",
+                    frame->width, frame->height, frame->channels, frame->format,
+                    frame->key_frame, frame->interlaced_frame,
+                    frame->top_field_first, videoCodecContext->field_order,
+                    frame->pts, av_q2d(videoStream->time_base), bufferSize);
+      if (desc == nullptr) {
+        spdlog::debug("desc is NULL");
+      } else {
+        spdlog::debug(
+            "desc name:{} nb_components:{} comp[0].plane:{} .offet:{} "
+            "comp[1].plane:{} .offset:{} comp[2].plane:{} .offset:{}",
+            desc->name, desc->nb_components, desc->comp[0].plane,
+            desc->comp[0].offset, desc->comp[1].plane, desc->comp[1].offset,
+            desc->comp[2].plane, desc->comp[2].offset);
+      }
+      spdlog::debug(
+          "buf[0]size:{} buf[1].size:{} buf[2].size:{} buffer_size:{}",
+          frame->buf[0]->size, frame->buf[1]->size, frame->buf[2]->size,
+          bufferSize);
+      if (initPts < 0) {
+        initPts = frame->pts;
+      }
+      frame->time_base = videoStream->time_base;
+
+      {
+        std::lock_guard<std::mutex> lock(videoFrameMtx);
+        videoFrameFound = true;
+        videoFrameQueue.push_back(av_frame_clone(frame));
+      }
+    }
+
+    av_packet_unref(ppacket);
+  }
+}
+
+void audioDecoderThreadFunc(AVCodecContext *audioCodecContext) {
+  AVFrame *frame = av_frame_alloc();
+
+  while (!resetedDecoder) {
+    AVPacket *ppacket;
+    {
+      std::unique_lock<std::mutex> lock(audioPacketMtx);
+      videoPacketCv.wait(lock, [&] { return !audioPacketQueue.empty(); });
+      ppacket = audioPacketQueue.front();
+      audioPacketQueue.pop_front();
+    }
+    AVPacket &packet = *ppacket;
+
+    int ret = avcodec_send_packet(audioCodecContext, &packet);
+    if (ret != 0) {
+      spdlog::error("avcodec_send_packet(audio) failed: {} {}", ret,
+                    av_err2str(ret));
+      // return;
+    }
+    while (avcodec_receive_frame(audioCodecContext, frame) == 0) {
+      spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
+                    "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{}",
+                    frame->format, frame->pts, av_q2d(frame->time_base),
+                    av_q2d(audioStream->time_base), frame->buf[0]->size,
+                    frame->buf[1]->size, frame->nb_samples);
+      if (initPts < 0) {
+        initPts = frame->pts;
+      }
+      frame->time_base = audioStream->time_base;
+      if (videoFrameFound) {
+        std::lock_guard<std::mutex> lock(audioFrameMtx);
+        audioFrameQueue.push_back(av_frame_clone(frame));
+      }
+    }
+  }
 }
 
 // decoder
@@ -283,6 +385,11 @@ void decoderThreadFunc() {
     }
   }
 
+  std::thread videoDecoderThread =
+      std::thread([&] { videoDecoderThreadFunc(videoCodecContext); });
+  std::thread audioDecoderThread =
+      std::thread([&] { audioDecoderThreadFunc(audioCodecContext); });
+
   // decode phase
   while (!resetedDecoder) {
     if (videoFrameQueue.size() > 180) {
@@ -302,74 +409,14 @@ void decoderThreadFunc() {
       continue;
     }
     if (packet.stream_index == videoStream->index) {
-      int ret = avcodec_send_packet(videoCodecContext, &packet);
-      if (ret != 0) {
-        spdlog::error("avcodec_send_packet(video) failed: {} {}", ret,
-                      av_err2str(ret));
-        // return;
-      }
-      while (avcodec_receive_frame(videoCodecContext, frame) == 0) {
-        videoCount++;
-        const AVPixFmtDescriptor *desc =
-            av_pix_fmt_desc_get((AVPixelFormat)(frame->format));
-        int bufferSize = av_image_get_buffer_size(
-            (AVPixelFormat)frame->format, frame->width, frame->height, 1);
-        spdlog::debug("VideoFrame: {}x{}x{} pixfmt:{} key:{} interlace:{} "
-                      "tff:{} codecContext->field_order:{} pts:{} "
-                      "stream.timebase:{} bufferSize:{}",
-                      frame->width, frame->height, frame->channels,
-                      frame->format, frame->key_frame, frame->interlaced_frame,
-                      frame->top_field_first, videoCodecContext->field_order,
-                      frame->pts, av_q2d(videoStream->time_base), bufferSize);
-        if (desc == nullptr) {
-          spdlog::debug("desc is NULL");
-        } else {
-          spdlog::debug(
-              "desc name:{} nb_components:{} comp[0].plane:{} .offet:{} "
-              "comp[1].plane:{} .offset:{} comp[2].plane:{} .offset:{}",
-              desc->name, desc->nb_components, desc->comp[0].plane,
-              desc->comp[0].offset, desc->comp[1].plane, desc->comp[1].offset,
-              desc->comp[2].plane, desc->comp[2].offset);
-        }
-        spdlog::debug(
-            "buf[0]size:{} buf[1].size:{} buf[2].size:{} buffer_size:{}",
-            frame->buf[0]->size, frame->buf[1]->size, frame->buf[2]->size,
-            bufferSize);
-        if (initPts < 0) {
-          initPts = frame->pts;
-        }
-        frame->time_base = videoStream->time_base;
-
-        {
-          std::lock_guard<std::mutex> lock(videoFrameMtx);
-          videoFrameFound = true;
-          videoFrameQueue.push_back(av_frame_clone(frame));
-        }
-      }
+      std::lock_guard<std::mutex> lock(videoPacketMtx);
+      videoPacketQueue.push_back(av_packet_clone(&packet));
+      videoPacketCv.notify_all();
     }
     if (packet.stream_index == audioStream->index) {
-      int ret = avcodec_send_packet(audioCodecContext, &packet);
-      if (ret != 0) {
-        spdlog::error("avcodec_send_packet(audio) failed: {} {}", ret,
-                      av_err2str(ret));
-        // return;
-      }
-      while (avcodec_receive_frame(audioCodecContext, frame) == 0) {
-        audioCount++;
-        spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
-                      "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{}",
-                      frame->format, frame->pts, av_q2d(frame->time_base),
-                      av_q2d(audioStream->time_base), frame->buf[0]->size,
-                      frame->buf[1]->size, frame->nb_samples);
-        if (initPts < 0) {
-          initPts = frame->pts;
-        }
-        frame->time_base = audioStream->time_base;
-        if (videoFrameFound) {
-          std::lock_guard<std::mutex> lock(audioFrameMtx);
-          audioFrameQueue.push_back(av_frame_clone(frame));
-        }
-      }
+      std::lock_guard<std::mutex> lock(audioPacketMtx);
+      audioPacketQueue.push_back(av_packet_clone(&packet));
+      audioPacketCv.notify_all();
     }
     if (packet.stream_index == captionStream->index) {
       char buffer[packet.size + 2];
@@ -395,6 +442,7 @@ void decoderThreadFunc() {
     }
     av_packet_unref(&packet);
   }
+
   avcodec_close(videoCodecContext);
   avcodec_free_context(&videoCodecContext);
   avcodec_close(audioCodecContext);
@@ -402,6 +450,9 @@ void decoderThreadFunc() {
 
   avio_context_free(&avioContext);
   avformat_free_context(formatContext);
+
+  videoDecoderThread.join();
+  audioDecoderThread.join();
 }
 
 std::thread decoderThread;
@@ -581,9 +632,11 @@ void decoderMainloop() {
       // 上記から推定される、現在再生している音声のPTS（時間）
       // double estimatedAudioPlayTime =
       //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+      // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
+      int sampleRate = audioStream->codecpar->sample_rate;
       double estimatedAudioPlayTime =
-          audioPtsTime -
-          (double)bufferedAudioSamples / audioStream->codecpar->sample_rate;
+          sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
+                     : audioPtsTime;
 
       auto data = emscripten::val(
           emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));

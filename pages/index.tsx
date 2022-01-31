@@ -614,7 +614,7 @@ const Page: NextPage = () => {
         <div
           css={css`
             position: absolute;
-            z-index: 3;
+            z-index: 99;
             width: 100%;
             height: 100%;
           `}
@@ -633,6 +633,7 @@ const Page: NextPage = () => {
             height: 100%;
             padding: 28px 12px;
             pointer-events: none;
+            z-index: 5;
           `}
         >
           <LineChart
