@@ -1,19 +1,32 @@
 /** @jsxImportSource @emotion/react */
 import { css } from '@emotion/react'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, {
+  RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState
+} from 'react'
 import { WasmModule } from '../lib/wasm/wasmlib'
 import { CanvasProvider } from 'aribb24.js'
 
 type Props = {
   //
   wasmModule: WasmModule | undefined
+  canvasRef: RefObject<HTMLCanvasElement>
   width?: number
   height?: number
   service: number | undefined
 }
 
-const Caption: React.FC<Props> = ({ wasmModule, width, height, service }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+const Caption: React.FC<Props> = ({
+  canvasRef,
+  wasmModule,
+  width,
+  height,
+  service
+}) => {
+  // const canvasRef = useRef<HTMLCanvasElement>(null)
   // const [currentSubtitle, setCurrentSubtitle] = useState<number>()
 
   const captionCallback = useCallback(

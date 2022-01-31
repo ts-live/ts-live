@@ -4,7 +4,7 @@ import { NextPage } from 'next'
 import dynamic from 'next/dynamic'
 import Script from 'next/script'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useAsync, useLocalStorage } from 'react-use'
+import { useAsync, useKey, useLocalStorage } from 'react-use'
 import {
   Box,
   Checkbox,
@@ -19,8 +19,8 @@ import {
 } from '@mui/material'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
-import { Module, StatsData } from '../lib/wasmmodule'
-import { createWasmModule, WasmModule } from '../lib/wasm/wasmlib'
+import { WasmModule, StatsData } from '../lib/wasm/wasmlib'
+import dayjs from 'dayjs'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
@@ -85,6 +85,9 @@ const Page: NextPage = () => {
     'tsplayerShowCaption',
     false
   )
+
+  const videoCanvasRef = useRef<HTMLCanvasElement>(null)
+  const captionCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const wasmMouduleState = useAsync(async () => {
     const mod = await new Promise<WasmModule>(resolve => {
@@ -297,6 +300,30 @@ const Page: NextPage = () => {
     activeRecordedFileId,
     playMode
   ])
+
+  useKey(
+    's',
+    () => {
+      console.log('Hotkey s pressed!!!')
+      if (!videoCanvasRef.current || !captionCanvasRef.current) return
+      const video = videoCanvasRef.current
+      const caption = captionCanvasRef.current
+      const canvas = document.createElement('canvas')
+      canvas.width = video.width
+      canvas.height = video.height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(video, 0, 0)
+      if (showCaption) {
+        ctx.drawImage(caption, 0, 0)
+      }
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/png')
+      a.download = `${dayjs().format('YYYYMMDD-HHmmss_SSS')}.png`
+      a.click()
+    },
+    {},
+    [showCaption]
+  )
 
   const getServicesOptions = useCallback(() => {
     return tvServices.map((service, idx) => {
@@ -593,6 +620,7 @@ const Page: NextPage = () => {
             z-index: 1;
           `}
           id='video'
+          ref={videoCanvasRef}
           tabIndex={-1}
           width={1920}
           height={1080}
@@ -607,6 +635,7 @@ const Page: NextPage = () => {
           <Caption
             service={activeService}
             wasmModule={wasmMouduleState.value}
+            canvasRef={captionCanvasRef}
             width={1920}
             height={1080}
           ></Caption>
