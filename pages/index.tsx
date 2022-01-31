@@ -90,7 +90,7 @@ const Page: NextPage = () => {
     const mod = await new Promise<WasmModule>(resolve => {
       const script = document.createElement('script')
       script.onload = () => {
-        createWasmModule().then(m => {
+        ;(window as any).createWasmModule().then((m: WasmModule) => {
           console.log('then', m)
           resolve(m)
         })
