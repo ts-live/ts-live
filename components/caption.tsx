@@ -32,7 +32,6 @@ const Caption: React.FC<Props> = ({ wasmModule, width, height }) => {
       const provider = new CanvasProvider(data, ptsTime)
       const estimate = provider.render()
       if (!estimate) return
-      console.log('estimate', estimate)
       // const font = setting.font || SUBTITLE_DEFAULT_FONT
       // const font = `"Rounded M+ 1m for ARIB"`
       const timer = setTimeout(() => {
