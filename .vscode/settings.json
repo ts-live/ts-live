@@ -15,6 +15,8 @@
         "utility": "cpp",
         "variant": "cpp",
         "*.tcc": "cpp",
-        "bitset": "cpp"
+        "bitset": "cpp",
+        "*.idl": "cpp",
+        "fstream": "cpp"
     }
 }

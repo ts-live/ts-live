@@ -16,15 +16,8 @@ import {
   Select,
   TextField
 } from '@mui/material'
-import {
-  CartesianGrid,
-  LineChart,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Line,
-  Legend
-} from 'recharts'
+import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
+import Head from 'next/head'
 
 declare interface WasmModule extends EmscriptenModule {
   getExceptionMsg(ex: number): string
@@ -38,7 +31,6 @@ declare interface WasmModule extends EmscriptenModule {
     callback: ((statsDataList: Array<StatsData>) => void) | null
   ): void
   playFile(url: string): void
-  setDeinterlace(deinterlace: boolean): void
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
   reset(): void
@@ -69,6 +61,12 @@ declare interface EpgRecordedFile {
 const Page: NextPage = () => {
   const [drawer, setDrawer] = useState<boolean>(true)
   const [touched, setTouched] = useState<boolean>(false)
+
+  const [originTrialToken, setOriginTrialToken] = useLocalStorage<string>(
+    'tsplayerOriginTrialToken',
+    undefined
+  )
+
   const [mirakurunServer, setMirakurunServer] = useLocalStorage<string>(
     'mirakurunServer',
     undefined
@@ -93,10 +91,6 @@ const Page: NextPage = () => {
   const [activeRecordedFileId, setActiveRecordedFileId] = useState<number>()
   const [playMode, setPlayMode] = useState<string>('live')
 
-  const [doDeinterlace, setDoDeinterlace] = useLocalStorage<boolean>(
-    'tsplayerDoDeinterlace',
-    false
-  )
   const [stopFunc, setStopFunc] = useState(() => () => {})
   const [chartData, setChartData] = useState<Array<StatsData>>([
     {
@@ -270,16 +264,6 @@ const Page: NextPage = () => {
   }, [epgStationServer, epgStationOk])
 
   useEffect(() => {
-    if (doDeinterlace === undefined) {
-      setDoDeinterlace(false)
-      return
-    }
-    if ((window as any).Module !== undefined) {
-      Module.setDeinterlace(doDeinterlace)
-    }
-  }, [doDeinterlace])
-
-  useEffect(() => {
     if (!touched) {
       // first gestureまでは再生しない
       return
@@ -294,7 +278,6 @@ const Page: NextPage = () => {
     // Module.setCaptionCallback(captionData => {
     //   console.log('Caption Callback', captionData)
     // })
-    Module.setDeinterlace(doDeinterlace || false)
     if (showCharts) {
       // depsに入れると毎回リスタートするので入れない
       Module.setStatsCallback(statsCallback)
@@ -391,25 +374,25 @@ const Page: NextPage = () => {
         background: #1e1e1e;
       `}
     >
+      <Head>
+        <meta
+          httpEquiv='origin-trial'
+          content='Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
+        ></meta>
+        {originTrialToken !== undefined ? (
+          <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
+        ) : null}
+      </Head>
       <Script id='setupModule' strategy='lazyOnload'>
         {`
             var Module = {
-              canvas: (function () { return document.getElementById('video'); })(),
+              // canvas: (function () { return document.getElementById('video'); })(),
               captionCanvas: (function () { return document.getElementById('caption'); })(),
-              doNotCaptureKeyboard: true,
-              onRuntimeInitialized: function(){
-                Module.setLogLevelInfo();
-                console.log('Module setup OK');
-              }
             };
 
         `}
       </Script>
-      <Script
-        id='wasm'
-        strategy='lazyOnload'
-        src='/wasm/ffmpeg-sdl2.js'
-      ></Script>
+      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script>
       <Drawer
         anchor='left'
         open={drawer}
@@ -433,6 +416,22 @@ const Page: NextPage = () => {
             `}
           >
             Web-TS-Player
+          </div>
+          <div
+            css={css`
+              margin-top: 28px;
+            `}
+          >
+            <TextField
+              label='Origin Trial Token'
+              css={css`
+                width: 100%;
+              `}
+              onChange={ev => {
+                setOriginTrialToken(ev.target.value)
+              }}
+              value={originTrialToken}
+            ></TextField>
           </div>
           <div
             css={css`
@@ -586,23 +585,6 @@ const Page: NextPage = () => {
               )}
             </Select>
           </FormControl>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            <FormGroup>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={doDeinterlace}
-                    onChange={ev => setDoDeinterlace(ev.target.checked)}
-                  ></Checkbox>
-                }
-                label='インターレースを解除する'
-              ></FormControlLabel>
-            </FormGroup>
-          </div>
           <div>
             <FormGroup>
               <FormControlLabel
@@ -648,7 +630,7 @@ const Page: NextPage = () => {
           onContextMenu={ev => ev.preventDefault()}
           // transformはWasmが書き換えるので要素のタグに直接書くこと
           style={{
-            transform: 'translate(-50%, -50%);'
+            transform: 'translate(-50%, -50%)'
           }}
         ></canvas>
         <canvas

@@ -29,7 +29,7 @@ void feedAudioData(float *buffer0, float *buffer1, int samples) {
   // clang-format on
 }
 
-std::string slurp(const char *filename) {
+static std::string slurp(const char *filename) {
   std::ifstream in;
   in.open(filename, std::ifstream::in | std::ifstream::binary);
   std::stringstream sstr;
