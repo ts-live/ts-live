@@ -9,9 +9,10 @@ type Props = {
   wasmModule: WasmModule | undefined
   width?: number
   height?: number
+  service: number | undefined
 }
 
-const Caption: React.FC<Props> = ({ wasmModule, width, height }) => {
+const Caption: React.FC<Props> = ({ wasmModule, width, height, service }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   // const [currentSubtitle, setCurrentSubtitle] = useState<number>()
 
@@ -59,6 +60,16 @@ const Caption: React.FC<Props> = ({ wasmModule, width, height }) => {
     if (!wasmModule) return
     wasmModule.setCaptionCallback(captionCallback)
   }, [wasmModule])
+
+  useEffect(() => {
+    if (!service) return
+    if (!canvasRef.current) return
+    const canvas = canvasRef.current
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.clearRect(0, 0, canvas.width, canvas.height)
+  }, [service])
+
   return (
     <canvas
       css={css`

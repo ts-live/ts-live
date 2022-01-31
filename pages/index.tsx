@@ -606,6 +606,7 @@ const Page: NextPage = () => {
         ></canvas>
         <div hidden={!showCaption}>
           <Caption
+            service={activeService}
             wasmModule={wasmMouduleState.value}
             width={1920}
             height={1080}
