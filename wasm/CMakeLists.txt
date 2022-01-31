@@ -82,7 +82,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
-add_executable(ts-live ts-live.cpp audio/audioworklet.cpp video/webgpu.cpp)
+add_executable(ts-live ts-live.cpp audio/audioworklet.cpp video/webgpu.cpp decoder/decoder.cpp)
 # set_target_properties(ts-live PROPERTIES OUTPUT_NAME ts-live)
 add_dependencies(ts-live ffmpeg)
 target_compile_options(ts-live PUBLIC -matomics -mbulk-memory)

@@ -563,9 +563,9 @@ const Page: NextPage = () => {
                     onChange={ev => {
                       setShowCharts(ev.target.checked)
                       if (ev.target.checked) {
-                        Module.setStatsCallback(statsCallback)
+                        wasmMouduleState.value?.setStatsCallback(statsCallback)
                       } else {
-                        Module.setStatsCallback(null)
+                        wasmMouduleState.value?.setStatsCallback(null)
                       }
                     }}
                   ></Checkbox>
