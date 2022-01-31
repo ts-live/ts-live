@@ -20,7 +20,6 @@ import {
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 import { WasmModule, StatsData } from '../lib/wasm/wasmlib'
-import { useHotkeys } from 'react-hotkeys-hook'
 import dayjs from 'dayjs'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
