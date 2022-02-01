@@ -27,6 +27,8 @@ export NGINX_HTTPS_PORT="${NGINX_HTTPS_PORT:=443}"
 
 [ -d "/etc/nginx/ssl/${FQDN}" ] || mkdir -p "/etc/nginx/ssl/${FQDN}"
 
+[ -f /etc/nginx/ssl/acme.sh.conf ] || echo 'CERT_HOME="/etc/nginx/ssl"' > /etc/nginx/ssl/acme.sh.conf
+
 [ -f "/etc/nginx/ssl/${FQDN}/fullchain.cer" ] || \
   acme.sh --register-account -m "${ACCOUNT_EMAIL}"
 
