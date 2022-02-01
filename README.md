@@ -1,4 +1,4 @@
-# web-ts-player
+# TS-Live!
 
 ブラウザで mirakurun の MPEGTS ストリームを直接再生する実験的 Web アプリ
 
@@ -36,3 +36,7 @@ $ yarn dev
 ## Origin Trial キー取得方法
 
 [Chrome の Origin Trials ページ](https://developer.chrome.com/origintrials/#/trials/active) から `WebGPU` の REGISTER ボタンを押し、Web Origin にhttps://hostname:port を入力、Notices と Terms を良く読んで REGISTER ボタンを押して登録します。登録後の画面で出てくる `Token` を web-ts-player の設定に入力します。
+
+## Docker イメージ
+
+CI で ghcr に自動アップロードされるようになってます。ドキュメントはそのうち・・・
