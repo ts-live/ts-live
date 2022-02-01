@@ -39,4 +39,4 @@ $ yarn dev
 
 ## Docker イメージ
 
-CI で ghcr に自動アップロードされるようになってます。ドキュメントはそのうち・・・
+CI で ghcr に自動アップロードされるようになってます。利用方法の詳細は [README_Docker.md](./README_Docker.md) を参照してください。
