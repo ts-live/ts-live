@@ -21,7 +21,7 @@ export NGINX_HTTPS_PORT="${NGINX_HTTPS_PORT:=443}"
 
 [ -f /etc/nginx/nginx.conf ] || cp /nginx-template/conf/nginx.conf /etc/nginx/nginx.conf
 [ -f /etc/nginx/conf.d/ssl.conf ] || \
-  envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT}' < /nginx-template/conf/conf.d/ssl.conf > /etc/nginx/conf.d/ssl.conf
+  envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIGIN_TRIAL_TOKEN}' < /nginx-template/conf/conf.d/ssl.conf > /etc/nginx/conf.d/ssl.conf
 
 [ -f /etc/nginx/ssl/ssl.conf ] || cp /nginx-template/ssl/ssl.conf /etc/nginx/ssl/ssl.conf
 
