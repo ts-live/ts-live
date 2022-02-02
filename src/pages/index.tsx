@@ -41,11 +41,6 @@ const Page: NextPage = () => {
   const [drawer, setDrawer] = useState<boolean>(true)
   const [touched, setTouched] = useState<boolean>(false)
 
-  const [originTrialToken, setOriginTrialToken] = useLocalStorage<string>(
-    'tsplayerOriginTrialToken',
-    undefined
-  )
-
   const [mirakurunServer, setMirakurunServer] = useLocalStorage<string>(
     'mirakurunServer',
     undefined
@@ -370,9 +365,6 @@ const Page: NextPage = () => {
           httpEquiv='origin-trial'
           content='Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
         ></meta>
-        {originTrialToken !== undefined ? (
-          <meta httpEquiv='origin-trial' content={originTrialToken}></meta>
-        ) : null}
       </Head>
       {/* <Script id='setupModule' strategy='lazyOnload'>
         {`
@@ -407,22 +399,6 @@ const Page: NextPage = () => {
             `}
           >
             {'TS-Live!'}
-          </div>
-          <div
-            css={css`
-              margin-top: 28px;
-            `}
-          >
-            <TextField
-              label='Origin Trial Token'
-              css={css`
-                width: 100%;
-              `}
-              onChange={ev => {
-                setOriginTrialToken(ev.target.value)
-              }}
-              value={originTrialToken}
-            ></TextField>
           </div>
           <div
             css={css`
