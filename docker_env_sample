@@ -1,6 +1,11 @@
 # FQDN: httpsサーバのFQDN。Aレコードの向き先は192.168.0.1などのローカルネットワークでもOK
 FQDN=myhostname.duckdns.org
 
+# Chrome の Origin Trial Token
+# https://developer.chrome.com/origintrials/#/view_trial/118219490218475521 から自分のサーバのFQDNに対応するものを取得する
+# ※下記例はlocalhostに対して発行したものなので、必ず自分で取得したものに置き換えること
+ORIGIN_TRIAL_TOKEN=Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ==
+
 # NGINX_HTTPS_PORT: 起動するhttpsサーバが待ち受けするポート番号
 NGINX_HTTPS_PORT=443
 
