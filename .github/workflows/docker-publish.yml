@@ -33,6 +33,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+      - name: Use Node.js 16
+        uses: actions/setup-node@v2
+        with:
+          node-version: "16.x"
+          cache: 'yarn'
+      
+      - name: build next.js
+        run: yarn build
+      - name: export next.js
+        run: yarn export
+
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
       - name: Install cosign

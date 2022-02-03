@@ -1,16 +1,4 @@
-FROM node:16-bullseye-slim AS next-build
-
-WORKDIR /app
-COPY package.json yarn.lock ./
-RUN yarn
-
-COPY next-env.d.ts next.config.js tsconfig.json ./
-COPY ./src ./src
-COPY ./public ./public
-RUN yarn build
-RUN yarn export
-
-FROM nginx:1.21 AS runner
+FROM nginx:1.21
 
 ENV DEBIAN_FRONTEND=noninteractive \
   LE_WORKING_DIR=/opt/acme.sh
@@ -38,7 +26,7 @@ COPY docker/docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
 COPY docker/template /template
-COPY --from=next-build /app/out /www
+COPY ./out /www
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
