@@ -307,7 +307,7 @@ const Page: NextPage = () => {
   ])
 
   useKey(
-    's',
+    'F2',
     () => {
       console.log('Hotkey s pressed!!!')
       if (!videoCanvasRef.current || !captionCanvasRef.current) return
