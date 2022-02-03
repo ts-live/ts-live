@@ -1,14 +1,4 @@
-# TS-Live を Docker で使う方法
-
-TS-Live の Docker コンテナは、TS-Live の html/js/wasm ファイルを https で配信すると共に、/api 以下を別ホストの mirakurun にリバースプロキシする nginx を起動します。
-
-このコンテナでは HTTPS の証明書にいわゆるオレオレ証明書ではなく、きちんと有効な証明書を取得できるようにしてあります。証明書の取得は [acme.sh](https://acme.sh) を使っているので自動で取得＆更新されます。
-
-有効な HTTPS 証明書を取得するためにドメイン名が必要になります。無料で済まそうとすると利用できる DNS プロバイダが限られてしまいますが、少なくとも [DuckDNS](https://duckdns.org) では無料でサブドメインを取得することができます。
-
-acme.sh は DuckDNS 以外にも AWS Route53、CloudFlare Domain、Conoha などの多くの DNS プロバイダに対応しています。詳しくは https://github.com/acmesh-official/acme.sh/wiki/dnsapi を参照してください。
-
-下記では DuckDNS を使用するときの手順を説明します。
+# acme.sh を利用した場合の Docker コンテナ設定方法
 
 ## ホスト名の準備
 
@@ -36,6 +26,7 @@ REGISTER ボタンを押して登録画面に移行し、Web Origin に 上記�
 （下記では説明のために開発用の localhost 対象の Origin Trials Token を設定しています）
 
 ```.env
+CERT_PROVIDER=acme.sh
 FQDN=mirakurun.duckdns.org
 ORIGIN_TRIAL_TOKEN=Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ==
 MIRAKURUN_HOST=mirakurun
