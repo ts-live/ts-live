@@ -33,10 +33,16 @@ $ yarn dev
 
 開発を楽にする目的なのであまり利便性とか力を入れてません。
 
-## Origin Trial キー取得方法
+## TS-Live を Docker で使う方法
 
-[Chrome の Origin Trials ページ](https://developer.chrome.com/origintrials/#/trials/active) から `WebGPU` の REGISTER ボタンを押し、Web Origin にhttps://hostname:port を入力、Notices と Terms を良く読んで REGISTER ボタンを押して登録します。登録後の画面で出てくる `Token` を web-ts-player の設定に入力します。
+TS-Live の Docker コンテナは、TS-Live の html/js/wasm ファイルを https で配信すると共に、/api 以下を別ホストの mirakurun にリバースプロキシする nginx を起動します。
 
-## Docker イメージ
+このコンテナでは HTTPS の証明書にいわゆるオレオレ証明書ではなく、きちんと有効な証明書を取得できるようにしてあります。証明書の取得は [acme.sh](https://acme.sh) または [tailscale](https://tailscale.com/) を使っていて、どちらも自動で取得＆更新できるスクリプトが組み込んであります。
 
-CI で ghcr に自動アップロードされるようになってます。利用方法の詳細は [README_Docker.md](./README_Docker.md) を参照してください。
+acme.sh を利用する場合は有効な HTTPS 証明書を取得するためにドメイン名が必要になります。無料で済まそうとすると利用できる DNS プロバイダが限られてしまいますが、少なくとも [DuckDNS](https://duckdns.org) では無料でサブドメインを取得することができます。
+
+acme.sh は DuckDNS 以外にも AWS Route53、CloudFlare Domain、Conoha などの多くの DNS プロバイダに対応しています。詳しくは https://github.com/acmesh-official/acme.sh/wiki/dnsapi を参照してください。
+
+acme.sh を利用する場合は [README_Docker_acme.md](./README_Docker_acme.md) を、tailscale を利用する場合は [README_tailscale.md](README_tailscale.md) を参照してください。
+
+
