@@ -21,6 +21,8 @@ $ yarn dev
 
 もしも暴走したっぽいときはタブを閉じて別タブで URL 入れ直すのが良いです（WebAssembly が暴れてるときの一般的対処）。
 
+F2 キーでスクリーンキャプチャが出来ます。
+
 ## 制限事項
 
 - WebAssembly thread を使う（=SharedArrayBuffer を使う）関係で Secure Context 必須
@@ -44,5 +46,3 @@ acme.sh を利用する場合は有効な HTTPS 証明書を取得するため�
 acme.sh は DuckDNS 以外にも AWS Route53、CloudFlare Domain、Conoha などの多くの DNS プロバイダに対応しています。詳しくは https://github.com/acmesh-official/acme.sh/wiki/dnsapi を参照してください。
 
 acme.sh を利用する場合は [README_Docker_acme.md](./README_Docker_acme.md) を、tailscale を利用する場合は [README_tailscale.md](README_tailscale.md) を参照してください。
-
-
