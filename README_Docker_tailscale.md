@@ -54,6 +54,8 @@ docker コマンド、docker-compose コマンドどちらの例も、カレン�
 docker run \
     -d \
     --env-file .env \
+    --cap-add NET_ADMIN \
+    --device /dev/net/tun \
     -v /etc/timezone:/etc/timezone:ro \
     -v /etc/localtime:/etc/localtime:ro \
     -v $(pwd)/nginx/ssl:/etc/nginx/ssl:rw \
@@ -70,6 +72,10 @@ docker run \
     ts-live:
         image: ghcr.io/kounoike/ts-live:main
         env_file: .env
+        cap_add:
+            - NET_ADMIN
+        devices:
+            - /dev/net/tun
         volumes:
             - /etc/timezone:/etc/timezone:ro
             - /etc/localtime:/etc/localtime:ro
