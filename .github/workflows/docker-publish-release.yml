@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: "16.x"
           cache: 'yarn'
-      
+
       - name: update node_modules
         run: yarn
       - name: build next.js
