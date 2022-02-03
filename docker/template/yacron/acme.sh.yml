@@ -1,0 +1,9 @@
+jobs:
+  - name: "acme.sh"
+    command: "/opt/acme.sh/acme.sh --cron --renew-hook \"nginx -s reload\" --home /opt/acme.sh"
+    shell: /bin/bash
+    captureStdout: false
+    timezone: Asia/Tokyo
+    schedule:
+      minute: "26"
+      hour: "13"

@@ -2,36 +2,77 @@
 
 set -e
 
-[ -z "${FQDN}" -o -z "${MIRAKURUN_HOST}" ] && \
-  echo "Please set FQDN[${FQDN}] and MIRAKURUN_HOST[${MIRAKURUN_HOST}] environment variables" && \
+[ "${CERT_PROVIDER}" != "acme.sh" -a "${CERT_PROVIDER}" != "tailscale" ] && \
+  echo "Please select CERT_PROVIDER[${CERT_PROVIDER}] from acme.sh or tailscale" && \
   exit 1
 
 export MIRAKURUN_PORT="${MIRAKURUN_PORT:=40772}"
 export NGINX_HTTPS_PORT="${NGINX_HTTPS_PORT:=443}"
 
-[ -z "${ACCOUNT_EMAIL}" -o -z "${DNSAPI}" ] && \
-  echo "Please set ACCOUNT_EMAIL[${ACCOUNT_EMAIL}] and DNSAPI[${DNSAPI}]" && \
+if [ "${CERT_PROVIDER}" = "acme.sh" ]; then
+  [ -z "${ACCOUNT_EMAIL}" -o -z "${DNSAPI}" ] && \
+    echo "Please set ACCOUNT_EMAIL[${ACCOUNT_EMAIL}] and DNSAPI[${DNSAPI}]" && \
+    exit 1
+elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
+  [ -z "${TAILSCALE_HOSTNAME}" -o -z "${TAILSCALE_DOMAINNAME}" -o -z "${TAILSCALE_AUTHKEY}" ] && \
+    echo "Please set TAILSCALE_HOSTNAME[${TAILSCALE_HOSTNAME}] TAILSCALE_DOMAINNAME[${TAILSCALE_DOMAINNAME}] and TAILSCALE_AUTHKEY[${TAILSCALE_AUTHKEY}]" && \
+    exit 1
+  export FQDN=${FQDN:=${TAILSCALE_HOSTNAME}.${TAILSCALE_DOMAINNAME}.ts.net}
+fi
+
+[ -z "${FQDN}" -o -z "${MIRAKURUN_HOST}" ] && \
+  echo "Please set FQDN[${FQDN}] and MIRAKURUN_HOST[${MIRAKURUN_HOST}] environment variables" && \
   exit 1
 
+# common settings
 [ -d /etc/nginx/conf.d ] || mkdir -p /etc/nginx/conf.d
-[ -d /etc/nginx/ssl/acme.sh ] || mkdir -p /etc/nginx/ssl/acme.sh
 
 [ -f /etc/nginx/ssl/dhparam.pem ] || \
   openssl dhparam -out /etc/nginx/ssl/dhparam.pem 2048
 
-cp -f /nginx-template/conf/nginx.conf /etc/nginx/nginx.conf
-envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIGIN_TRIAL_TOKEN}' < /nginx-template/conf/conf.d/ssl.conf > /etc/nginx/conf.d/ssl.conf
+cp -f /template/nginx/ssl/ssl.conf /etc/nginx/ssl/ssl.conf
+cp -f /template/nginx/conf/nginx.conf /etc/nginx/nginx.conf
 
-cp -f /nginx-template/ssl/ssl.conf /etc/nginx/ssl/ssl.conf
+[ -d /etc/yacron.d ] || mkdir -p /etc/yacron.d
 
-[ -d "/etc/nginx/ssl/${FQDN}" ] || mkdir -p "/etc/nginx/ssl/${FQDN}"
+if [ "${CERT_PROVIDER}" = "acme.sh" ]; then
+  curl https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | \
+    sh -s -- --install-online -m ${ACCOUNT_EMAIL} --home /opt/acme.sh --cert-home /etc/nginx/ssl --force
 
-[ -f /etc/nginx/ssl/acme.sh.conf ] || echo 'CERT_HOME="/etc/nginx/ssl"' > /etc/nginx/ssl/acme.sh.conf
+  export CERT_FILE="ssl/${FQDN}/fullchain.cer"
+  export KEY_FILE="ssl/${FQDN}/${FQDN}.key"
 
-[ -f "/etc/nginx/ssl/${FQDN}/fullchain.cer" ] || \
-  acme.sh --register-account -m "${ACCOUNT_EMAIL}"
+  [ -d "/etc/nginx/ssl/${FQDN}" ] || mkdir -p "/etc/nginx/ssl/${FQDN}"
+  [ -d /etc/nginx/ssl/acme.sh ] || mkdir -p /etc/nginx/ssl/acme.sh
 
-acme.sh --issue --dns "${DNSAPI}" -d "${FQDN}" || true
+  [ -f /etc/nginx/ssl/acme.sh.conf ] || echo 'CERT_HOME="/etc/nginx/ssl"' > /etc/nginx/ssl/acme.sh.conf
 
-busybox crond -b -L /var/log/crond.log
-nginx -g "daemon off;"
+  [ -f "/etc/nginx/ssl/${FQDN}/fullchain.cer" ] || \
+    /opt/acme.sh/acme.sh --register-account -m "${ACCOUNT_EMAIL}"
+
+  /opt/acme.sh/acme.sh --issue --dns "${DNSAPI}" -d "${FQDN}" || true
+  cp -f /template/yacron/acme.sh.yml /etc/yacron.d/acme.sh.yml
+  cp -f /template/supervisord_acme.sh.conf /etc/supervisord.conf
+
+elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
+  export CERT_FILE="ssl/tailscale.cer"
+  export KEY_FILE="ssl/tailscale.key"
+
+  cp -f /template/yacron/tailscale.yml /etc/yacron.d/tailscale.yml
+  cp -f /template/supervisord_tailscale.conf /etc/supervisord.conf
+
+  sh -c "sleep 10;
+    /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME} &&
+    /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN} && 
+    /usr/local/bin/supervisorctl start nginx
+    " &
+fi
+
+
+# common setting again
+envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIGIN_TRIAL_TOKEN} ${CERT_FILE} ${KEY_FILE}' \
+  < /template/nginx/conf/conf.d/ssl.conf \
+  > /etc/nginx/conf.d/ssl.conf
+
+exec /usr/local/bin/supervisord --nodaemon -c /etc/supervisord.conf
+
