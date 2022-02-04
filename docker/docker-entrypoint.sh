@@ -51,20 +51,20 @@ if [ "${CERT_PROVIDER}" = "acme.sh" ]; then
     /opt/acme.sh/acme.sh --register-account -m "${ACCOUNT_EMAIL}"
 
   /opt/acme.sh/acme.sh --issue --dns "${DNSAPI}" -d "${FQDN}" || true
-  cp -f /template/yacron/acme.sh.yml /etc/yacron.d/acme.sh.yml
+  cp -f /template/ofelia/ofelia_acme.sh.ini /etc/ofelia.ini
   cp -f /template/supervisord_acme.sh.conf /etc/supervisord.conf
 
 elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
   export CERT_FILE="ssl/tailscale.cer"
   export KEY_FILE="ssl/tailscale.key"
 
-  cp -f /template/yacron/tailscale.yml /etc/yacron.d/tailscale.yml
+  cp -f /template/ofelia/ofelia_tailscale.ini /etc/ofelia.ini
   cp -f /template/supervisord_tailscale.conf /etc/supervisord.conf
 
   sh -c "sleep 10;
     /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME} &&
     /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN} && 
-    /usr/local/bin/supervisorctl start nginx
+    /usr/local/bin/supervisord ctl start nginx
     " &
 fi
 
@@ -74,5 +74,5 @@ envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIG
   < /template/nginx/conf/conf.d/ssl.conf \
   > /etc/nginx/conf.d/ssl.conf
 
-exec /usr/local/bin/supervisord --nodaemon -c /etc/supervisord.conf
+exec /usr/local/bin/supervisord daemon -c /etc/supervisord.conf
 
