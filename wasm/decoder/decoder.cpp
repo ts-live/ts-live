@@ -38,6 +38,9 @@ size_t inputBufferReadIndex = 0;
 size_t inputBufferWriteIndex = 0;
 
 // for libav
+AVCodecContext *videoCodecContext = nullptr;
+AVCodecContext *audioCodecContext = nullptr;
+
 std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
 std::deque<std::pair<int64_t, std::vector<uint8_t>>> captionDataQueue;
 std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
@@ -64,6 +67,9 @@ std::vector<emscripten::val> statsBuffer;
 
 emscripten::val statsCallback = emscripten::val::null();
 
+const size_t donwloadRangeSize = 2 * 1024 * 1024;
+size_t downloadCount = 0;
+
 // Callback register
 void setCaptionCallback(emscripten::val callback) {
   captionCallback = callback;
@@ -76,16 +82,17 @@ void setStatsCallback(emscripten::val callback) {
 
 // Buffer control
 emscripten::val getNextInputBuffer(size_t nextSize) {
-  std::unique_lock<std::mutex> lock(inputBufferMtx);
-  waitCv.wait(lock, [&] {
-    return MAX_INPUT_BUFFER - inputBufferWriteIndex + inputBufferReadIndex >
-           nextSize;
-  });
-  if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER) {
+  // ここまで
+  if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER &&
+      inputBufferReadIndex > 0) {
     size_t remainSize = inputBufferWriteIndex - inputBufferReadIndex;
     memcpy(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
     inputBufferReadIndex = 0;
     inputBufferWriteIndex = remainSize;
+  }
+  if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER) {
+    spdlog::error("Buffer overflow");
+    return emscripten::val::null();
   }
   auto retVal = emscripten::val(emscripten::typed_memory_view<uint8_t>(
       nextSize, &inputBuffer[inputBufferWriteIndex]));
@@ -96,8 +103,13 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
 int read_packet(void *opaque, uint8_t *buf, int bufSize) {
   std::unique_lock<std::mutex> lock(inputBufferMtx);
   waitCv.wait(lock, [&] {
-    return inputBufferWriteIndex - inputBufferReadIndex >= bufSize;
+    return inputBufferWriteIndex - inputBufferReadIndex >= bufSize ||
+           resetedDecoder;
   });
+  if (resetedDecoder) {
+    spdlog::debug("resetedDecoder detected in read_packet");
+    return -1;
+  }
   memcpy(buf, &inputBuffer[inputBufferReadIndex], bufSize);
   inputBufferReadIndex += bufSize;
   waitCv.notify_all();
@@ -108,12 +120,74 @@ void commitInputData(size_t nextSize) {
   std::lock_guard<std::mutex> lock(inputBufferMtx);
   inputBufferWriteIndex += nextSize;
   waitCv.notify_all();
+  spdlog::debug("commit {} bytes", nextSize);
 }
 
-void videoDecoderThreadFunc(AVCodecContext *videoCodecContext) {
+// reset
+void resetInternal() {
+  downloadCount = 0;
+  playFileUrl = std::string("");
+
+  spdlog::info("downloaderThread joinable: {}", downloaderThread.joinable());
+  if (downloaderThread.joinable()) {
+    spdlog::info("join to downloader thread");
+    downloaderThread.join();
+    spdlog::info("done.");
+  }
+  {
+    std::lock_guard<std::mutex> lock(inputBufferMtx);
+    inputBufferReadIndex = 0;
+    inputBufferWriteIndex = 0;
+  }
+  {
+    std::lock_guard<std::mutex> lock(videoPacketMtx);
+    while (!videoPacketQueue.empty()) {
+      auto ppacket = videoPacketQueue.front();
+      videoPacketQueue.pop_front();
+      av_packet_unref(ppacket);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(audioPacketMtx);
+    while (!audioPacketQueue.empty()) {
+      auto ppacket = audioPacketQueue.front();
+      audioPacketQueue.pop_front();
+      av_packet_unref(ppacket);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(videoFrameMtx);
+    while (!videoFrameQueue.empty()) {
+      auto frame = videoFrameQueue.front();
+      videoFrameQueue.pop_front();
+      av_frame_free(&frame);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> lock(audioFrameMtx);
+    while (!audioFrameQueue.empty()) {
+      auto frame = audioFrameQueue.front();
+      audioFrameQueue.pop_front();
+      av_frame_free(&frame);
+    }
+  }
+  videoStream = nullptr;
+  audioStream = nullptr;
+  captionStream = nullptr;
+  videoFrameFound = false;
+}
+
+void reset() {
+  spdlog::debug("reset()");
+  resetedDecoder = true;
+  resetedDownloader = true;
+  resetInternal();
+}
+
+void videoDecoderThreadFunc() {
   AVFrame *frame = av_frame_alloc();
 
-  while (!resetedDecoder) {
+  while (true) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(videoPacketMtx);
@@ -158,7 +232,8 @@ void videoDecoderThreadFunc(AVCodecContext *videoCodecContext) {
       if (initPts < 0) {
         initPts = frame->pts;
       }
-      frame->time_base = videoStream->time_base;
+      frame->time_base.den = videoStream->time_base.den;
+      frame->time_base.num = videoStream->time_base.num;
 
       {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
@@ -171,10 +246,10 @@ void videoDecoderThreadFunc(AVCodecContext *videoCodecContext) {
   }
 }
 
-void audioDecoderThreadFunc(AVCodecContext *audioCodecContext) {
+void audioDecoderThreadFunc() {
   AVFrame *frame = av_frame_alloc();
 
-  while (!resetedDecoder) {
+  while (true) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(audioPacketMtx);
@@ -205,12 +280,14 @@ void audioDecoderThreadFunc(AVCodecContext *audioCodecContext) {
         audioFrameQueue.push_back(av_frame_clone(frame));
       }
     }
+    av_packet_unref(ppacket);
   }
 }
 
 // decoder
 void decoderThreadFunc() {
   spdlog::info("Decoder Thread started.");
+  resetInternal();
   AVFormatContext *formatContext = nullptr;
   AVIOContext *avioContext = nullptr;
   uint8_t *ibuf = nullptr;
@@ -219,9 +296,6 @@ void decoderThreadFunc() {
 
   const AVCodec *videoCodec = nullptr;
   const AVCodec *audioCodec = nullptr;
-
-  AVCodecContext *videoCodecContext = nullptr;
-  AVCodecContext *audioCodecContext = nullptr;
 
   AVFrame *frame = nullptr;
 
@@ -385,11 +459,6 @@ void decoderThreadFunc() {
     }
   }
 
-  std::thread videoDecoderThread =
-      std::thread([&] { videoDecoderThreadFunc(videoCodecContext); });
-  std::thread audioDecoderThread =
-      std::thread([&] { audioDecoderThreadFunc(audioCodecContext); });
-
   // decode phase
   while (!resetedDecoder) {
     if (videoFrameQueue.size() > 180) {
@@ -443,6 +512,8 @@ void decoderThreadFunc() {
     av_packet_unref(&packet);
   }
 
+  spdlog::debug("decoderThreadFunc breaked.");
+
   avcodec_close(videoCodecContext);
   avcodec_free_context(&videoCodecContext);
   avcodec_close(audioCodecContext);
@@ -451,11 +522,12 @@ void decoderThreadFunc() {
   avio_context_free(&avioContext);
   avformat_free_context(formatContext);
 
-  videoDecoderThread.join();
-  audioDecoderThread.join();
+  spdlog::debug("decoderThreadFunc end.");
 }
 
 std::thread decoderThread;
+std::thread videoDecoderThread;
+std::thread audioDecoderThread;
 
 void initDecoder() {
   // デコーダスレッド起動
@@ -466,6 +538,9 @@ void initDecoder() {
       decoderThreadFunc();
     }
   });
+
+  videoDecoderThread = std::thread([&] { videoDecoderThreadFunc(); });
+  audioDecoderThread = std::thread([&] { audioDecoderThreadFunc(); });
 }
 
 void decoderMainloop() {
@@ -491,6 +566,26 @@ void decoderMainloop() {
     }
   }
 
+  // time_base が 0/0 な不正フレームが入ってたら捨てる
+  while (!videoFrameQueue.empty()) {
+    AVFrame *frame = videoFrameQueue.front();
+    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+      std::lock_guard<std::mutex> lock(videoFrameMtx);
+      videoFrameQueue.pop_front();
+    } else {
+      break;
+    }
+  }
+  while (!audioFrameQueue.empty()) {
+    AVFrame *frame = audioFrameQueue.front();
+    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+      std::lock_guard<std::mutex> lock(audioFrameMtx);
+      audioFrameQueue.pop_front();
+    } else {
+      break;
+    }
+  }
+
   if (videoFrameQueue.size() > 0 && audioFrameQueue.size() > 0) {
     // std::lock_guard<std::mutex> lock(videoFrameMtx);
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
@@ -498,9 +593,11 @@ void decoderMainloop() {
     //              currentFrame->height, bufferSize);
     // 次のVideoFrameをまずは見る（popはまだしない）
     AVFrame *currentFrame = videoFrameQueue.front();
-    spdlog::debug("VideoFrame@mainloop pts:{} time_base:{} AudioQueueSize:{}",
-                  currentFrame->pts, av_q2d(currentFrame->time_base),
-                  audioFrameQueue.size());
+    spdlog::debug(
+        "VideoFrame@mainloop pts:{} time_base:{} {}/{} AudioQueueSize:{}",
+        currentFrame->pts, av_q2d(currentFrame->time_base),
+        currentFrame->time_base.num, currentFrame->time_base.den,
+        audioFrameQueue.size());
 
     // WindowSize確認＆リサイズ
     // TODO:
@@ -645,9 +742,6 @@ void decoderMainloop() {
   }
 }
 
-const size_t donwloadRangeSize = 2 * 1024 * 1024;
-size_t downloadCount = 0;
-
 void downloadNextRange() {
   emscripten_fetch_attr_t attr;
   emscripten_fetch_attr_init(&attr);
@@ -698,45 +792,6 @@ void downloaderThraedFunc() {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }
-}
-
-// reset
-void reset() {
-  resetedDecoder = true;
-  resetedDownloader = true;
-  downloadCount = 0;
-  playFileUrl = std::string("");
-
-  spdlog::info("downloaderThread joinable: {}", downloaderThread.joinable());
-  if (downloaderThread.joinable()) {
-    spdlog::info("join to downloader thread");
-    downloaderThread.join();
-    spdlog::info("done.");
-  }
-  {
-    std::lock_guard<std::mutex> lock(inputBufferMtx);
-    inputBufferReadIndex = 0;
-    inputBufferWriteIndex = 0;
-  }
-  {
-    std::lock_guard<std::mutex> lock(videoFrameMtx);
-    while (videoFrameQueue.size() > 0) {
-      auto frame = videoFrameQueue.front();
-      videoFrameQueue.pop_front();
-      av_frame_free(&frame);
-    }
-  }
-  {
-    std::lock_guard<std::mutex> lock(audioFrameMtx);
-    while (audioFrameQueue.size() > 0) {
-      auto frame = audioFrameQueue.front();
-      audioFrameQueue.pop_front();
-      av_frame_free(&frame);
-    }
-  }
-  videoStream = nullptr;
-  audioStream = nullptr;
-  captionStream = nullptr;
 }
 
 void playFile(std::string url) {
