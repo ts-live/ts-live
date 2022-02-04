@@ -107,7 +107,6 @@ const Page: NextPage = () => {
   //   )
   //   return CanvasProvider
   // })
-
   const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
     setChartData(prev => {
       if (prev.length + statsDataList.length > 300) {
@@ -137,7 +136,7 @@ const Page: NextPage = () => {
   }, [mirakurunServer])
 
   useEffect(() => {
-    if (!mirakurunServer) {
+    if (!mirakurunServer || !mirakurunOk) {
       return
     }
     fetch(`${mirakurunServer}/api/services`).then(response => {
@@ -185,7 +184,7 @@ const Page: NextPage = () => {
   }, [epgStationServer])
 
   useEffect(() => {
-    if (!epgStationServer) return
+    if (!epgStationServer || !epgStationOk) return
     fetch(
       `${epgStationServer}/api/recorded?isHalfWidth=false&offset=0&limit=30`
     )
@@ -211,11 +210,6 @@ const Page: NextPage = () => {
   }, [epgStationServer, epgStationOk])
 
   useEffect(() => {
-    if (!touched) {
-      // first gestureまでは再生しない
-      console.log('not touched')
-      return
-    }
     if (!mirakurunOk || !mirakurunServer || !activeService) {
       console.log(
         'mirakurunServer or activeService',
@@ -248,62 +242,66 @@ const Page: NextPage = () => {
       Module.setStatsCallback(null)
     }
 
-    // 再生スタート
-    if (playMode === 'live') {
-      const ac = new AbortController()
-      setStopFunc(() => () => {
-        console.log('abort fetch')
-        ac.abort()
-        Module.reset()
-      })
-      const url = `${mirakurunServer}/api/services/${activeService}/stream`
-      fetch(url, {
-        signal: ac.signal,
-        headers: { 'X-Mirakurun-Priority': '0' }
-      })
-        .then(async response => {
-          if (!response.body) {
-            console.error('response body is not supplied.')
-            return
-          }
-          const reader = response.body.getReader()
-          let ret = await reader.read()
-          while (!ret.done) {
-            if (ret.value) {
-              try {
-                const buffer = Module.getNextInputBuffer(ret.value.length)
-                buffer.set(ret.value)
-                // console.debug('calling enqueueData', chunk.length)
-                Module.commitInputData(ret.value.length)
-                // console.debug('enqueData done.')
-              } catch (ex) {
-                if (typeof ex === 'number') {
-                  console.error(Module.getExceptionMsg(ex))
-                  throw ex
+    // 0.2秒遅らす
+    setTimeout(() => {
+      // 再生スタート
+      if (playMode === 'live') {
+        const ac = new AbortController()
+        setStopFunc(() => () => {
+          console.log('abort fetch')
+          ac.abort()
+          Module.reset()
+          console.log('abort fetch done.')
+        })
+        const url = `${mirakurunServer}/api/services/${activeService}/stream`
+        console.log('start fetch', url, Module)
+        fetch(url, {
+          signal: ac.signal,
+          headers: { 'X-Mirakurun-Priority': '0' }
+        })
+          .then(async response => {
+            if (!response.body) {
+              console.error('response body is not supplied.')
+              return
+            }
+            const reader = response.body.getReader()
+            let ret = await reader.read()
+            while (!ret.done) {
+              if (ret.value) {
+                try {
+                  const buffer = Module.getNextInputBuffer(ret.value.length)
+                  buffer.set(ret.value)
+                  // console.debug('calling enqueueData', chunk.length)
+                  Module.commitInputData(ret.value.length)
+                  // console.debug('enqueData done.')
+                } catch (ex) {
+                  if (typeof ex === 'number') {
+                    console.error(Module.getExceptionMsg(ex))
+                    throw ex
+                  }
                 }
               }
+              ret = await reader.read()
             }
-            ret = await reader.read()
-          }
+          })
+          .catch(ex => {
+            console.log('fetch aborted ex:', ex)
+          })
+      } else if (playMode === 'file') {
+        setStopFunc(() => () => {
+          Module.reset()
         })
-        .catch(ex => {
-          console.log('fetch aborted ex:', ex)
-        })
-    } else if (playMode === 'file') {
-      setStopFunc(() => () => {
-        Module.reset()
-      })
-      const url = `${epgStationServer}/api/videos/${activeRecordedFileId}`
-      Module.playFile(url)
-    }
+        const url = `${epgStationServer}/api/videos/${activeRecordedFileId}`
+        Module.playFile(url)
+      }
+    }, 200)
   }, [
-    touched,
     mirakurunOk,
-    mirakurunServer,
+    epgStationOk,
     activeService,
-    epgStationServer,
     activeRecordedFileId,
-    playMode
+    playMode,
+    wasmMouduleState
   ])
 
   useKey(
