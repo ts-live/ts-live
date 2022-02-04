@@ -18,26 +18,6 @@ fn to_coord(tex: texture_2d<f32>, fragUV: vec2<f32>) -> vec2<i32> {
   );
 }
 
-fn load(tex: texture_2d<f32>, coord: vec2<i32>) -> f32 {
-  return textureLoad(tex, coord, 0)[0];
-}
-
-fn avg(a: f32, b: f32) -> f32 {
-  return a / 2.0 + b / 2.0;
-}
-
-fn absd(a: f32, b: f32) -> f32 {
-  return abs(a - b);
-}
-
-fn max3(a: f32, b: f32, c: f32) -> f32 {
-  return max(max(a, b), c);
-}
-
-fn min3(a: f32, b: f32, c: f32) -> f32 {
-  return (min(min(a, b), c));
-}
-
 fn bordered(x_: i32, y_: i32, dim: vec2<i32>) -> vec2<i32> {
   var x = x_;
   var y = y_;
@@ -56,82 +36,93 @@ fn bordered(x_: i32, y_: i32, dim: vec2<i32>) -> vec2<i32> {
   return vec2<i32>(x, y);
 }
 
-fn yadif_coord(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coord: vec2<i32>) -> f32 {
-  var dim = textureDimensions(cur);
+fn load(tex: texture_2d<f32>, x: i32, y: i32) -> f32 {
+  return textureLoad(tex, bordered(x, y, textureDimensions(tex)), 0)[0];
+}
+
+fn avg(a: f32, b: f32) -> f32 {
+  return a / 2.0 + b / 2.0;
+}
+
+fn absd(a: f32, b: f32) -> f32 {
+  return abs(a - b);
+}
+
+fn max3(a: f32, b: f32, c: f32) -> f32 {
+  return max(max(a, b), c);
+}
+
+fn min3(a: f32, b: f32, c: f32) -> f32 {
+  return (min(min(a, b), c));
+}
+
+fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coord: vec2<i32>) -> f32 {
   var x = coord[0];
   var y = coord[1];
 
   if (y % 2 == 0) {
-    return load(cur, coord);
+    return load(cur, x, y);
   } else {
-    var c = load(cur, bordered(x, y - 1, dim));
-    var d = avg(load(cur, coord), load(next, coord));
-    var e = load(cur, bordered(x, y + 1, dim));
-    var tmp_diff0 = absd(load(cur, coord), load(next, coord)) / 2.0;
-    var tmp_diff1 = avg(absd(load(prev, bordered(x, y - 1, dim)), c), absd(load(prev, bordered(x, y + 1, dim)), e));
-    var tmp_diff2 = avg(absd(load(next, bordered(x, y - 1, dim)), c), absd(load(next, bordered(x, y + 1, dim)), e));
+    var c = load(cur, x, y - 1);
+    var d = avg(load(cur, x, y), load(next, x, y));
+    var e = load(cur, x, y + 1);
+    var tmp_diff0 = absd(load(cur, x, y), load(next, x, y)) / 2.0;
+    var tmp_diff1 = avg(absd(load(prev, x, y - 1), c), absd(load(prev, x, y + 1), e));
+    var tmp_diff2 = avg(absd(load(next, x, y - 1), c), absd(load(next, x, y + 1), e));
     var diff = max3(tmp_diff0, tmp_diff1, tmp_diff2);
     var spatial_pred = avg(c, e);
-    var spatial_score =
-      absd(load(cur, bordered(x - 1, y - 1, dim)), load(cur, bordered(x - 1, y + 1, dim)))
+    var score_0 =
+      absd(load(cur, x - 1, y - 1), load(cur, x - 1, y + 1))
       + absd(c, e)
-      + absd(load(cur, bordered(x + 1, y - 1, dim)), load(cur, bordered(x + 1, y + 1, dim)))
+      + absd(load(cur, x + 1, y - 1), load(cur, x + 1, y + 1))
       - 1.0 / 255.0;
 
-    {
-      var score =
-          absd(load(cur, bordered(x - 2, y - 1, dim)), load(cur, bordered(x - 0, y + 1, dim)))
-        + absd(load(cur, bordered(x - 1, y - 1, dim)), load(cur, bordered(x + 1, y + 1, dim)))
-        + absd(load(cur, bordered(x - 0, y - 1, dim)), load(cur, bordered(x + 2, y + 1, dim)));
-      if (score < spatial_score) {
-        spatial_score = score;
-        spatial_pred = avg(load(cur, bordered(x - 1, y - 1, dim)), load(cur, bordered(x + 1, y + 1, dim)));
+    var score_1 =
+        absd(load(cur, x - 2, y - 1), load(cur, x - 0, y + 1))
+      + absd(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1))
+      + absd(load(cur, x - 0, y - 1), load(cur, x + 2, y + 1));
+    var spatial_pred_1 = avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1));
 
-        var score = 
-          absd(load(cur, bordered(x - 3, y - 1, dim)), load(cur, bordered(x + 1, y + 1, dim)))
-        + absd(load(cur, bordered(x - 2, y - 1, dim)), load(cur, bordered(x + 2, y + 1, dim)))
-        + absd(load(cur, bordered(x - 1, y - 1, dim)), load(cur, bordered(x + 3, y + 1, dim)));
-        if (score < spatial_score) {
-          spatial_score = score;
-          spatial_pred = avg(load(cur, bordered(x - 2, y - 1, dim)), load(cur, bordered(x + 2, y + 1, dim)));
-        }
+    var score_11 = 
+      absd(load(cur, x - 3, y - 1), load(cur, x + 1, y + 1))
+    + absd(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1))
+    + absd(load(cur, x - 1, y - 1), load(cur, x + 3, y + 1));
+    var spatial_pred_11 = avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1));
+
+    var score_2 =
+        absd(load(cur, x - 0, y - 1), load(cur, x - 2, y + 1))
+      + absd(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1))
+      + absd(load(cur, x + 2, y - 1), load(cur, x - 0, y + 1));
+    var spatial_pred_2 = avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1));
+
+    var score_21 = 
+      absd(load(cur, x + 1, y - 1), load(cur, x - 3, y + 1))
+    + absd(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1))
+    + absd(load(cur, x + 3, y - 1), load(cur, x - 1, y + 1));
+    var spatial_pred_21 = avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1));
+
+    if (score_1 < score_0 && score_1 < score_2) {
+      if (score_11 < score_1) {
+        spatial_pred = spatial_pred_11;
+      } else {
+        spatial_pred = spatial_pred_1;
+      }
+    } else if (score_2 < score_0 && score_2 < score_1) {
+      if (score_21 < score_2) {
+        spatial_pred = spatial_pred_21;
+      } else {
+        spatial_pred = spatial_pred_2;
       }
     }
-    {
-      var score =
-          absd(load(cur, bordered(x - 0, y - 1, dim)), load(cur, bordered(x - 2, y + 1, dim)))
-        + absd(load(cur, bordered(x + 1, y - 1, dim)), load(cur, bordered(x - 1, y + 1, dim)))
-        + absd(load(cur, bordered(x + 2, y - 1, dim)), load(cur, bordered(x - 0, y + 1, dim)));
-      if (score < spatial_score) {
-        spatial_score = score;
-        spatial_pred = avg(load(cur, bordered(x + 1, y - 1, dim)), load(cur, bordered(x - 1, y + 1, dim)));
 
-        var score = 
-          absd(load(cur, bordered(x + 1, y - 1, dim)), load(cur, bordered(x - 3, y + 1, dim)))
-        + absd(load(cur, bordered(x + 2, y - 1, dim)), load(cur, bordered(x - 2, y + 1, dim)))
-        + absd(load(cur, bordered(x + 3, y - 1, dim)), load(cur, bordered(x - 1, y + 1, dim)));
-        if (score < spatial_score) {
-          spatial_score = score;
-          spatial_pred = avg(load(cur, bordered(x + 2, y - 1, dim)), load(cur, bordered(x - 2, y + 1, dim)));
-        }
-      }
-    }
-
-    var b = avg(load(cur, bordered(x, y - 2, dim)), load(next, bordered(x, y - 2, dim)));
-    var f = avg(load(cur, bordered(x, y + 2, dim)), load(next, bordered(x, y + 2, dim)));
+    var b = avg(load(cur, x, y - 2), load(next, x, y - 2));
+    var f = avg(load(cur, x, y + 2), load(next, x, y + 2));
     var max_ = max3(d - e, d -c, min(b -c, f - e));
     var min_ = min3(d - e, d -c, max(b -c, f - e));
     diff = max3(diff, min_, -max_);
 
-    spatial_pred = clamp(spatial_pred, d - diff, d + diff);
-
-    return spatial_pred;
+    return clamp(spatial_pred, d - diff, d + diff);
   }
-}
-
-fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, fragUV: vec2<f32>) -> f32 {
-  var coord = to_coord(cur, fragUV);
-  return yadif_coord(cur, prev, next, coord);
 }
 
 [[stage(compute), workgroup_size(32, 8, 1)]]
@@ -140,18 +131,9 @@ fn main(
 ) {
   var coord = vec2<i32>(i32(coord3[0]), i32(coord3[1]));
   var coord2 = vec2<i32>(i32(coord3[0] / 2u), i32(coord3[1] / 2u));
-  var y = yadif_coord(currentY, prevY, nextY, coord) - 16.0 / 255.0;
-  var u = yadif_coord(currentU, prevU, nextU, coord2) - 128.0 / 255.0;
-  var v = yadif_coord(currentV, prevV, nextV, coord2) - 128.0 / 255.0;
+  var y = yadif(currentY, prevY, nextY, coord) - 16.0 / 255.0;
+  var u = yadif(currentU, prevU, nextU, coord2) - 128.0 / 255.0;
+  var v = yadif(currentV, prevV, nextV, coord2) - 128.0 / 255.0;
   var rgba = vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
   textureStore(outputFrame, coord, rgba);
 }
-
-
-// [[stage(fragment)]]
-// fn main([[location(0)]] fragUV : vec2<f32>) -> [[location(0)]] vec4<f32> {
-//   var y = (yadif(currentY, prevY, nextY, fragUV) - 16.0 / 255.0);
-//   var u = (yadif(currentU, prevU, nextU, fragUV) - 128.0 / 255.0);
-//   var v = (yadif(currentV, prevV, nextV, fragUV) - 128.0 / 255.0);
-//   return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
-// }
