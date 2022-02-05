@@ -49,12 +49,15 @@ int main() {
   startTime = std::chrono::system_clock::now();
 
   // デコーダスレッド起動
+  spdlog::info("initializing Decoder");
   initDecoder();
 
   // AudioWorklet起動
+  spdlog::info("initializing audio worklet");
   startAudioWorklet();
 
   // WebGPU起動
+  spdlog::info("initializing webgpu");
   initWebGpu();
 
   // //

@@ -44,7 +44,6 @@ const Page: NextPage = () => {
   const [mirakurunServer, setMirakurunServer] = useLocalStorage<string>(
     'mirakurunServer',
     location.hostname !== 'localhost' ? location.origin : undefined
-
   )
   const [mirakurunOk, setMirakurunOk] = useState<boolean>(false)
   const [mirakurunVersion, setMirakurunVersion] = useState<string>('unknown')
@@ -86,19 +85,24 @@ const Page: NextPage = () => {
   const captionCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const wasmMouduleState = useAsync(async () => {
+    const adapter = await (navigator as any).gpu.requestAdapter()
+    const device = await adapter.requestDevice()
     const mod = await new Promise<WasmModule>(resolve => {
       const script = document.createElement('script')
       script.onload = () => {
-        ;(window as any).createWasmModule().then((m: WasmModule) => {
-          console.log('then', m)
-          resolve(m)
-        })
+        ;(window as any)
+          .createWasmModule({ preinitializedWebGPUDevice: device })
+          .then((m: WasmModule) => {
+            console.log('then', m)
+            resolve(m)
+          })
       }
       script.src = '/wasm/ts-live.js'
       document.head.appendChild(script)
       console.log('script element created')
     })
     console.log('mod', mod)
+    // mod.setLogLevelDebug()
     return mod
   }, [])
 
