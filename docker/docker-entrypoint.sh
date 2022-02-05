@@ -61,11 +61,18 @@ elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
   cp -f /template/ofelia/ofelia_tailscale.ini /etc/ofelia.ini
   cp -f /template/supervisord_tailscale.conf /etc/supervisord.conf
 
-  sh -c "sleep 10;
-    /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME} &&
-    /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN} && 
+  (
+    while : ; do
+      if tailscale status > /dev/null; then
+        /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME}
+        break
+      else
+        sleep 1
+      fi
+    done
+    /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN}
     /usr/local/bin/supervisorctl start nginx
-    " &
+  ) &
 fi
 
 # common setting again
