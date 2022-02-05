@@ -544,6 +544,11 @@ void initDecoder() {
 }
 
 void decoderMainloop() {
+  spdlog::debug("decoderMainloop videoFrameQueue:{} audioFrameQueue:{} "
+                "videoPacketQueue:{} audioPacketQueue:{}",
+                videoFrameQueue.size(), audioFrameQueue.size(),
+                videoPacketQueue.size(), audioPacketQueue.size());
+
   if (videoStream && audioStream && !statsCallback.isNull()) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now() - startTime);

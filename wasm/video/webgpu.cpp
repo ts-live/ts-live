@@ -324,16 +324,7 @@ static void createPipeline() {
   wgpuShaderModuleRelease(vertMod);
 }
 
-// clang-format off
-EM_ASYNC_JS(void, setup_webgpu_device, (), {
-  const adapter = await navigator.gpu.requestAdapter();
-  const device = await adapter.requestDevice();
-  Module['preinitializedWebGPUDevice'] = device;
-});
-// clang-format on
-
 void initWebGpu() {
-  setup_webgpu_device();
   ctx.device = emscripten_webgpu_get_device();
 
   ctx.queue = wgpuDeviceGetQueue(ctx.device);
