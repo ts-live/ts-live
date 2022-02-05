@@ -6,6 +6,11 @@
 
 MIT-License（内部で利用している ffmpeg は LGPL です。他にも多数のライブラリを使っているので個別に確認してください）
 
+## 対応ブラウザ
+
+Chrome 98 以降（適宜対応していきます）
+Origin Trial の関係で Edge には対応していません。
+
 ## run
 
 ```
@@ -13,7 +18,7 @@ $ yarn
 $ yarn dev
 ```
 
-3000 番ポートで起動したことをメッセージで確認すること（3000 じゃないときはどこかで別のアプリが 3000 を開いてます）。
+3000 番ポートで起動したことをメッセージで確認すること（3000 じゃないときはどこかで別のアプリが 3000 を開いてます）。または Docker イメージ https://github.com/ts-live/ts-live/pkgs/container/ts-live を使う。
 
 ## 操作方法
 
@@ -46,3 +51,5 @@ acme.sh を利用する場合は有効な HTTPS 証明書を取得するため�
 acme.sh は DuckDNS 以外にも AWS Route53、CloudFlare Domain、Conoha などの多くの DNS プロバイダに対応しています。詳しくは https://github.com/acmesh-official/acme.sh/wiki/dnsapi を参照してください。
 
 acme.sh を利用する場合は [README_Docker_acme.md](./README_Docker_acme.md) を、tailscale を利用する場合は [README_tailscale.md](README_tailscale.md) を参照してください。
+
+[Chinachu](https://github.com/Chinachu/Chinachu)/[EPGStation](https://github.com/l3tnun/EPGStation) をリバースプロキシで提供する機能もあります。[README_chinachu_epgstation.md] を参照してください。
