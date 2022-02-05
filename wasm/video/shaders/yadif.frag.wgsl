@@ -107,11 +107,13 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coo
       } else {
         spatial_pred = spatial_pred_1;
       }
-    } else if (score_2 < score_0 && score_2 < score_1) {
-      if (score_21 < score_2) {
-        spatial_pred = spatial_pred_21;
-      } else {
-        spatial_pred = spatial_pred_2;
+    } else {
+      if (score_2 < score_0 && score_2 < score_1) {
+        if (score_21 < score_2) {
+          spatial_pred = spatial_pred_21;
+        } else {
+          spatial_pred = spatial_pred_2;
+        }
       }
     }
 
