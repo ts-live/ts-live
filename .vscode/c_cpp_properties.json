@@ -17,7 +17,7 @@
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-clang-x64",
-            "compileCommands": ""
+            "compileCommands": "${workspaceFolder}/wasm/build/compile_commands.json"
         }
     ],
     "version": 4

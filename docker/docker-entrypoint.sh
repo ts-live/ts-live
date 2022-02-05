@@ -68,11 +68,36 @@ elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
     " &
 fi
 
-
 # common setting again
 envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIGIN_TRIAL_TOKEN} ${CERT_FILE} ${KEY_FILE}' \
   < /template/nginx/conf/conf.d/ssl.conf \
   > /etc/nginx/conf.d/ssl.conf
+
+# Chinachu/EPGStation settings
+# default
+export CHINACHU_PATH=${CHINACHU_PATH:=chinachu}
+export CHINACHU_HOST=${CHINACHU_HOST:=chinachu}
+export CHINACHU_PORT=${CHINACHU_PORT:=10772}
+
+export EPGSTATION_PATH=${EPGSTATION_PATH:=epgstation}
+export EPGSTATION_HOST=${EPGSTATION_HOST:=epgstation}
+export EPGSTATION_PORT=${EPGSTATION_PORT:=8888}
+
+# nginx include
+rm -f /etc/nginx/conf.d/epgstation.conf.inc
+rm -f /etc/nginx/conf.d/chinachu.conf.inc
+
+if [ -n "${USE_CHINACHU}" ]; then
+  envsubst '${CHINACHU_PATH} ${CHINACHU_HOST} ${CHINACHU_PORT}' \
+    < /template/nginx/conf/conf.d/chinachu.conf.inc \
+    > /etc/nginx/conf.d/chinachu.conf.inc
+fi
+
+if [ -n "${USE_EPGSTATION}" ]; then
+  envsubst '${EPGSTATION_PATH} ${EPGSTATION_HOST} ${EPGSTATION_PORT}' \
+    < /template/nginx/conf/conf.d/epgstation.conf.inc \
+    > /etc/nginx/conf.d/epgstation.conf.inc
+fi
 
 exec /usr/local/bin/supervisord --nodaemon -c /etc/supervisord.conf
 
