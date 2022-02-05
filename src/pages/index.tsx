@@ -43,12 +43,13 @@ const Page: NextPage = () => {
 
   const [mirakurunServer, setMirakurunServer] = useLocalStorage<string>(
     'mirakurunServer',
-    undefined
+    location.hostname !== 'localhost' ? location.origin : undefined
+
   )
   const [mirakurunOk, setMirakurunOk] = useState<boolean>(false)
   const [mirakurunVersion, setMirakurunVersion] = useState<string>('unknown')
   const [tvServices, setTvServices] = useState<Array<TvService>>([])
-  const [activeService, setActiveService] = useLocalStorage<number | undefined>(
+  const [activeService, setActiveService] = useLocalStorage<number>(
     'mirakurunActiveService',
     undefined
   )
