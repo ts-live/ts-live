@@ -82,7 +82,7 @@ void setStatsCallback(emscripten::val callback) {
 
 // Buffer control
 emscripten::val getNextInputBuffer(size_t nextSize) {
-  // ここまで
+  std::lock_guard<std::mutex> lock(inputBufferMtx);
   if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER &&
       inputBufferReadIndex > 0) {
     size_t remainSize = inputBufferWriteIndex - inputBufferReadIndex;
@@ -184,14 +184,48 @@ void reset() {
   resetInternal();
 }
 
-void videoDecoderThreadFunc() {
+void videoDecoderThreadFunc(bool &terminateFlag) {
+  // find decoder
+  const AVCodec *videoCodec =
+      avcodec_find_decoder(videoStream->codecpar->codec_id);
+  if (videoCodec == nullptr) {
+    spdlog::error("No supported decoder for Video ...");
+    return;
+  } else {
+    spdlog::debug("Video Decoder created.");
+  }
+
+  // Codec Context
+  videoCodecContext = avcodec_alloc_context3(videoCodec);
+  if (videoCodecContext == nullptr) {
+    spdlog::error("avcodec_alloc_context3 for video failed");
+    return;
+  } else {
+    spdlog::debug("avcodec_alloc_context3 for video success.");
+  }
+  // open codec
+  if (avcodec_parameters_to_context(videoCodecContext, videoStream->codecpar) <
+      0) {
+    spdlog::error("avcodec_parameters_to_context failed");
+    return;
+  }
+  if (avcodec_open2(videoCodecContext, videoCodec, nullptr) != 0) {
+    spdlog::error("avcodec_open2 failed");
+    return;
+  }
+  spdlog::debug("avcodec for video open success.");
+
   AVFrame *frame = av_frame_alloc();
 
-  while (true) {
+  while (!terminateFlag) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(videoPacketMtx);
-      videoPacketCv.wait(lock, [&] { return !videoPacketQueue.empty(); });
+      videoPacketCv.wait(
+          lock, [&] { return !videoPacketQueue.empty() || terminateFlag; });
+      if (terminateFlag) {
+        break;
+      }
       ppacket = videoPacketQueue.front();
       videoPacketQueue.pop_front();
     }
@@ -241,19 +275,57 @@ void videoDecoderThreadFunc() {
         videoFrameQueue.push_back(av_frame_clone(frame));
       }
     }
-
     av_packet_unref(ppacket);
   }
+
+  spdlog::debug("closing videoCodecContext");
+  avcodec_close(videoCodecContext);
+  spdlog::debug("freeing videoCodecContext");
+  avcodec_free_context(&videoCodecContext);
 }
 
-void audioDecoderThreadFunc() {
-  AVFrame *frame = av_frame_alloc();
+void audioDecoderThreadFunc(bool &terminateFlag) {
+  const AVCodec *audioCodec =
+      avcodec_find_decoder(audioStream->codecpar->codec_id);
+  if (audioCodec == nullptr) {
+    spdlog::error("No supported decoder for Audio ...");
+    return;
+  } else {
+    spdlog::debug("Audio Decoder created.");
+  }
+  audioCodecContext = avcodec_alloc_context3(audioCodec);
+  if (audioCodecContext == nullptr) {
+    spdlog::error("avcodec_alloc_context3 for audio failed");
+    return;
+  } else {
+    spdlog::debug("avcodec_alloc_context3 for audio success.");
+  }
+  // open codec
+  if (avcodec_parameters_to_context(audioCodecContext, audioStream->codecpar) <
+      0) {
+    spdlog::error("avcodec_parameters_to_context failed");
+    return;
+  }
 
-  while (true) {
+  if (avcodec_open2(audioCodecContext, audioCodec, nullptr) != 0) {
+    spdlog::error("avcodec_open2 failed");
+    return;
+  }
+  spdlog::debug("avcodec for audio open success.");
+
+  // 巻き戻す
+  // inputBufferReadIndex = 0;
+
+  AVFrame *frame = av_frame_alloc();
+  while (!terminateFlag) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(audioPacketMtx);
-      videoPacketCv.wait(lock, [&] { return !audioPacketQueue.empty(); });
+      videoPacketCv.wait(
+          lock, [&] { return !audioPacketQueue.empty() || terminateFlag; });
+      if (terminateFlag) {
+        break;
+      }
       ppacket = audioPacketQueue.front();
       audioPacketQueue.pop_front();
     }
@@ -282,6 +354,10 @@ void audioDecoderThreadFunc() {
     }
     av_packet_unref(ppacket);
   }
+  spdlog::debug("closing audioCodecContext");
+  avcodec_close(audioCodecContext);
+  spdlog::debug("freeing videoCodecContext");
+  avcodec_free_context(&audioCodecContext);
 }
 
 // decoder
@@ -293,9 +369,6 @@ void decoderThreadFunc() {
   uint8_t *ibuf = nullptr;
   size_t ibufSize = 64 * 1024;
   size_t requireBufSize = 2 * 1024 * 1024;
-
-  const AVCodec *videoCodec = nullptr;
-  const AVCodec *audioCodec = nullptr;
 
   AVFrame *frame = nullptr;
 
@@ -391,73 +464,14 @@ void decoderThreadFunc() {
                      avcodec_get_name(captionStream->codecpar->codec_id));
       }
     }
-
-    // find decoder
-    if (videoCodec == nullptr) {
-      videoCodec = avcodec_find_decoder(videoStream->codecpar->codec_id);
-      if (videoCodec == nullptr) {
-        spdlog::error("No supported decoder for Video ...");
-        return;
-      } else {
-        spdlog::debug("Video Decoder created.");
-      }
-    }
-    if (audioCodec == nullptr) {
-      audioCodec = avcodec_find_decoder(audioStream->codecpar->codec_id);
-      if (audioCodec == nullptr) {
-        spdlog::error("No supported decoder for Audio ...");
-        return;
-      } else {
-        spdlog::debug("Audio Decoder created.");
-      }
-    }
-
-    // Codec Context
-    if (videoCodecContext == nullptr) {
-      videoCodecContext = avcodec_alloc_context3(videoCodec);
-      if (videoCodecContext == nullptr) {
-        spdlog::error("avcodec_alloc_context3 for video failed");
-        return;
-      } else {
-        spdlog::debug("avcodec_alloc_context3 for video success.");
-      }
-      // open codec
-      if (avcodec_parameters_to_context(videoCodecContext,
-                                        videoStream->codecpar) < 0) {
-        spdlog::error("avcodec_parameters_to_context failed");
-        return;
-      }
-      if (avcodec_open2(videoCodecContext, videoCodec, nullptr) != 0) {
-        spdlog::error("avcodec_open2 failed");
-        return;
-      }
-      spdlog::debug("avcodec for video open success.");
-    }
-    if (audioCodecContext == nullptr) {
-      audioCodecContext = avcodec_alloc_context3(audioCodec);
-      if (audioCodecContext == nullptr) {
-        spdlog::error("avcodec_alloc_context3 for audio failed");
-        return;
-      } else {
-        spdlog::debug("avcodec_alloc_context3 for audio success.");
-      }
-      // open codec
-      if (avcodec_parameters_to_context(audioCodecContext,
-                                        audioStream->codecpar) < 0) {
-        spdlog::error("avcodec_parameters_to_context failed");
-        return;
-      }
-
-      if (avcodec_open2(audioCodecContext, audioCodec, nullptr) != 0) {
-        spdlog::error("avcodec_open2 failed");
-        return;
-      }
-      spdlog::debug("avcodec for audio open success.");
-
-      // 巻き戻す
-      // inputBufferReadIndex = 0;
-    }
   }
+
+  bool videoTerminateFlag = false;
+  bool audioTerminateFlag = false;
+  std::thread videoDecoderThread =
+      std::thread([&]() { videoDecoderThreadFunc(videoTerminateFlag); });
+  std::thread audioDecoderThread =
+      std::thread([&]() { audioDecoderThreadFunc(audioTerminateFlag); });
 
   // decode phase
   while (!resetedDecoder) {
@@ -514,20 +528,30 @@ void decoderThreadFunc() {
 
   spdlog::debug("decoderThreadFunc breaked.");
 
-  avcodec_close(videoCodecContext);
-  avcodec_free_context(&videoCodecContext);
-  avcodec_close(audioCodecContext);
-  avcodec_free_context(&audioCodecContext);
+  {
+    std::lock_guard<std::mutex> lock(videoPacketMtx);
+    videoTerminateFlag = true;
+    videoPacketCv.notify_all();
+  }
+  {
+    std::lock_guard<std::mutex> lock(audioPacketMtx);
+    audioTerminateFlag = true;
+    audioPacketCv.notify_all();
+  }
+  spdlog::debug("join to videoDecoderThread");
+  videoDecoderThread.join();
+  spdlog::debug("join to audioDecoderThread");
+  audioDecoderThread.join();
 
+  spdlog::debug("freeing avio_context");
   avio_context_free(&avioContext);
+  // spdlog::debug("freeing avformat context");
   avformat_free_context(formatContext);
 
   spdlog::debug("decoderThreadFunc end.");
 }
 
 std::thread decoderThread;
-std::thread videoDecoderThread;
-std::thread audioDecoderThread;
 
 void initDecoder() {
   // デコーダスレッド起動
@@ -538,9 +562,6 @@ void initDecoder() {
       decoderThreadFunc();
     }
   });
-
-  videoDecoderThread = std::thread([&] { videoDecoderThreadFunc(); });
-  audioDecoderThread = std::thread([&] { audioDecoderThreadFunc(); });
 }
 
 void decoderMainloop() {
