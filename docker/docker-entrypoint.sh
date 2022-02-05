@@ -51,14 +51,14 @@ if [ "${CERT_PROVIDER}" = "acme.sh" ]; then
     /opt/acme.sh/acme.sh --register-account -m "${ACCOUNT_EMAIL}"
 
   /opt/acme.sh/acme.sh --issue --dns "${DNSAPI}" -d "${FQDN}" || true
-  cp -f /template/yacron/acme.sh.yml /etc/yacron.d/acme.sh.yml
+  cp -f /template/ofelia/ofelia_acme.sh.ini /etc/ofelia.ini
   cp -f /template/supervisord_acme.sh.conf /etc/supervisord.conf
 
 elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
   export CERT_FILE="ssl/tailscale.cer"
   export KEY_FILE="ssl/tailscale.key"
 
-  cp -f /template/yacron/tailscale.yml /etc/yacron.d/tailscale.yml
+  cp -f /template/ofelia/ofelia_tailscale.ini /etc/ofelia.ini
   cp -f /template/supervisord_tailscale.conf /etc/supervisord.conf
 
   sh -c "sleep 10;
