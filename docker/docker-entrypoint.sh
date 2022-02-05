@@ -64,7 +64,7 @@ elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
   sh -c "sleep 10;
     /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME} &&
     /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN} && 
-    /usr/local/bin/supervisord ctl start nginx
+    /usr/local/bin/supervisorctl start nginx
     " &
 fi
 
@@ -74,5 +74,5 @@ envsubst '${FQDN} ${MIRAKURUN_HOST} ${MIRAKURUN_PORT} ${NGINX_HTTPS_PORT} ${ORIG
   < /template/nginx/conf/conf.d/ssl.conf \
   > /etc/nginx/conf.d/ssl.conf
 
-exec /usr/local/bin/supervisord daemon -c /etc/supervisord.conf
+exec /usr/local/bin/supervisord --nodaemon -c /etc/supervisord.conf
 

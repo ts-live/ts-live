@@ -19,14 +19,14 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH \
   go build \
   -o /usr/local/bin/ofelia
 
-WORKDIR /app/supervisord
-RUN curl -fsSL https://github.com/ochinchina/supervisord/archive/refs/tags/v0.7.3.tar.gz \
-  | tar xzvpf - --strip-components=1
-RUN go get github.com/UnnoTed/fileb0x && go generate
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH \
-  go build \
-  -tags release \
-  -o /usr/local/bin/supervisord
+# WORKDIR /app/supervisord
+# RUN curl -fsSL https://github.com/ochinchina/supervisord/archive/refs/tags/v0.7.3.tar.gz \
+#   | tar xzvpf - --strip-components=1
+# RUN go get github.com/UnnoTed/fileb0x && go generate
+# RUN GOOS=$TARGETOS GOARCH=$TARGETARCH \
+#   go build \
+#   -tags release \
+#   -o /usr/local/bin/supervisord
 
 FROM nginx:1.21 AS runner
 
@@ -42,7 +42,10 @@ RUN set -ex && \
   git \
   gnupg \
   openssl \
+  python3 \
+  python3-pip \
   && \
+  pip3 install supervisor && \
   curl -fsSL https://tailscale.com/install.sh | sh && \
   apt-get clean && rm -rf /var/lib/apt/lists/* /var/log/apt /var/log/dpkg.log
 
@@ -53,7 +56,6 @@ RUN chmod +x /docker-entrypoint.sh
 
 COPY docker/template /template
 COPY --from=next-build /app/out /www
-COPY --from=go-build /usr/local/bin/supervisord /usr/local/bin/
 COPY --from=go-build /usr/local/bin/ofelia /usr/local/bin/
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
