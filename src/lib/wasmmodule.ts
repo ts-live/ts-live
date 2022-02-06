@@ -21,5 +21,6 @@ export declare interface WasmModule extends EmscriptenModule {
   getNextInputBuffer(size: number): Uint8Array
   commitInputData(size: number): void
   reset(): void
+  setAudioGain(volume: number): void
 }
 export declare var Module: WasmModule

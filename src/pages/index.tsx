@@ -3,7 +3,7 @@ import { css } from '@emotion/react'
 import { NextPage } from 'next'
 import dynamic from 'next/dynamic'
 import Script from 'next/script'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { EventHandler, useCallback, useEffect, useRef, useState } from 'react'
 import { useAsync, useKey, useLocalStorage } from 'react-use'
 import {
   Box,
@@ -15,8 +15,12 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Slider,
+  Stack,
   TextField
 } from '@mui/material'
+import VolumeDown from '@mui/icons-material/VolumeDown'
+import VolumeUp from '@mui/icons-material/VolumeUp'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 import { WasmModule, StatsData } from '../lib/wasmmodule'
@@ -64,6 +68,7 @@ const Page: NextPage = () => {
   >()
   const [activeRecordedFileId, setActiveRecordedFileId] = useState<number>()
   const [playMode, setPlayMode] = useState<string>('live')
+  const [volume, setVolume] = useState<number>(1.0)
 
   const [stopFunc, setStopFunc] = useState(() => () => {})
   const [chartData, setChartData] = useState<Array<StatsData>>([
@@ -84,7 +89,7 @@ const Page: NextPage = () => {
   const videoCanvasRef = useRef<HTMLCanvasElement>(null)
   const captionCanvasRef = useRef<HTMLCanvasElement>(null)
 
-  const wasmMouduleState = useAsync(async () => {
+  const wasmModuleState = useAsync(async () => {
     const adapter = await (navigator as any).gpu.requestAdapter()
     const device = await adapter.requestDevice()
     const mod = await new Promise<WasmModule>(resolve => {
@@ -225,14 +230,14 @@ const Page: NextPage = () => {
       return
     }
     if (
-      wasmMouduleState.loading ||
-      wasmMouduleState.error ||
-      !wasmMouduleState.value
+      wasmModuleState.loading ||
+      wasmModuleState.error ||
+      !wasmModuleState.value
     ) {
-      console.log('WasmModule not loaded', wasmMouduleState.error)
+      console.log('WasmModule not loaded', wasmModuleState.error)
       return
     }
-    const Module = wasmMouduleState.value
+    const Module = wasmModuleState.value
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
 
@@ -306,7 +311,7 @@ const Page: NextPage = () => {
     activeService,
     activeRecordedFileId,
     playMode,
-    wasmMouduleState
+    wasmModuleState
   ])
 
   useKey(
@@ -352,6 +357,18 @@ const Page: NextPage = () => {
       )
     })
   }, [epgRecordedFiles, activeRecordedFileId])
+
+  const volumeChangeHandler = useCallback(
+    (event: React.SyntheticEvent | Event, val: number | Array<number>) => {
+      if (val !== null && typeof val === 'number') {
+        setVolume(val)
+        if (wasmModuleState.value !== undefined) {
+          wasmModuleState.value.setAudioGain(val)
+        }
+      }
+    },
+    [wasmModuleState.value]
+  )
 
   return (
     <Box
@@ -533,6 +550,31 @@ const Page: NextPage = () => {
               width: 100%;
             `}
           >
+            <Stack
+              spacing={2}
+              direction='row'
+              sx={{ mb: 1 }}
+              alignItems='center'
+            >
+              <VolumeDown />
+              <Slider
+                aria-label='Volume'
+                min={0}
+                max={2}
+                step={0.1}
+                value={volume}
+                onChangeCommitted={volumeChangeHandler}
+              />
+              <VolumeUp />
+            </Stack>
+          </FormControl>
+          <FormControl
+            fullWidth
+            css={css`
+              margin-top: 24px;
+              width: 100%;
+            `}
+          >
             <InputLabel id='playmode-label'>再生モード</InputLabel>
             <Select
               css={css`
@@ -580,9 +622,9 @@ const Page: NextPage = () => {
                     onChange={ev => {
                       setShowCharts(ev.target.checked)
                       if (ev.target.checked) {
-                        wasmMouduleState.value?.setStatsCallback(statsCallback)
+                        wasmModuleState.value?.setStatsCallback(statsCallback)
                       } else {
-                        wasmMouduleState.value?.setStatsCallback(null)
+                        wasmModuleState.value?.setStatsCallback(null)
                       }
                     }}
                   ></Checkbox>
@@ -624,7 +666,7 @@ const Page: NextPage = () => {
         <div hidden={!showCaption}>
           <Caption
             service={activeService}
-            wasmModule={wasmMouduleState.value}
+            wasmModule={wasmModuleState.value}
             canvasRef={captionCanvasRef}
             width={1920}
             height={1080}
