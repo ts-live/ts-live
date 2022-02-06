@@ -86,4 +86,5 @@ EMSCRIPTEN_BINDINGS(ts_live_module) {
   emscripten::function("setLogLevelDebug", &setLogLevelDebug);
   emscripten::function("setLogLevelInfo", &setLogLevelInfo);
   emscripten::function("setBufferedAudioSamples", &setBufferedAudioSamples);
+  emscripten::function("setAudioGain", &setAudioGain);
 }

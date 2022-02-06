@@ -49,12 +49,24 @@ void startAudioWorklet() {
       const audioNode = new AudioWorkletNode(
           audioContext, 'audio-feeder-processor',
           {numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2]});
-      audioNode.connect(audioContext.destination);
+      const gainNode = audioContext.createGain();
+      audioNode.connect(gainNode);
+      gainNode.connect(audioContext.destination);
       console.log('AudioSetup OK');
-      Module['myAudio'] = {ctx: audioContext, node: audioNode};
+      Module['myAudio'] = {ctx: audioContext, node: audioNode, gain: gainNode};
       audioContext.resume();
       audioNode.port.onmessage = e => {Module.setBufferedAudioSamples(e.data)};
+      console.log('latency', Module['myAudio']['ctx'].baseLatency)
     })();
   }, scriptSource.c_str());
   // clang-format on
+}
+
+void setAudioGain(double val) {
+  EM_ASM(
+      {
+        Module.myAudio.gain.gain.setValueAtTime($0,
+                                                Module.myAudio.ctx.currentTime);
+      },
+      val);
 }
