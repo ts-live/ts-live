@@ -37,7 +37,16 @@ fn bordered(x_: i32, y_: i32, dim: vec2<i32>) -> vec2<i32> {
 }
 
 fn load(tex: texture_2d<f32>, x: i32, y: i32) -> f32 {
-  return textureLoad(tex, bordered(x, y, textureDimensions(tex)), 0)[0];
+
+  // https://www.w3.org/TR/WGSL/#textureload
+  // If an out of bounds access occurs, the built-in function returns one of:
+  // - The data for some texel within bounds of the texture
+  // - A vector (0,0,0,0) or (0,0,0,1) of the appropriate type for non-depth textures
+  // - 0.0 for depth textures
+  // とあるので、実装によって結果が違うかも・・・
+  return textureLoad(tex, vec2<i32>(x, y), 0)[0];
+
+  // return textureLoad(tex, bordered(x, y, textureDimensions(tex)), 0)[0];
 }
 
 fn avg(a: f32, b: f32) -> f32 {
