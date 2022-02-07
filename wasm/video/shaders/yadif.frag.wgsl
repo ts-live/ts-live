@@ -144,7 +144,7 @@ fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
   return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
 }
 
-[[stage(compute), workgroup_size(32, 8, 1)]]
+[[stage(compute), workgroup_size(16, 4, 1)]]
 fn main(
   [[builtin(global_invocation_id)]] coord3: vec3<u32>
 ) {
