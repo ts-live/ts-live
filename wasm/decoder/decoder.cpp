@@ -52,7 +52,7 @@ std::mutex videoPacketMtx, audioPacketMtx;
 std::condition_variable videoPacketCv, audioPacketCv;
 
 AVStream *videoStream = nullptr;
-AVStream *audioStream = nullptr;
+std::vector<AVStream *> audioStreamList;
 AVStream *captionStream = nullptr;
 
 int64_t initPts = -1;
@@ -181,7 +181,7 @@ void resetInternal() {
     }
   }
   videoStream = nullptr;
-  audioStream = nullptr;
+  audioStreamList.clear();
   captionStream = nullptr;
   videoFrameFound = false;
 }
@@ -295,7 +295,7 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
 
 void audioDecoderThreadFunc(bool &terminateFlag) {
   const AVCodec *audioCodec =
-      avcodec_find_decoder(audioStream->codecpar->codec_id);
+      avcodec_find_decoder(audioStreamList[0]->codecpar->codec_id);
   if (audioCodec == nullptr) {
     spdlog::error("No supported decoder for Audio ...");
     return;
@@ -310,8 +310,8 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     spdlog::debug("avcodec_alloc_context3 for audio success.");
   }
   // open codec
-  if (avcodec_parameters_to_context(audioCodecContext, audioStream->codecpar) <
-      0) {
+  if (avcodec_parameters_to_context(audioCodecContext,
+                                    audioStreamList[0]->codecpar) < 0) {
     spdlog::error("avcodec_parameters_to_context failed");
     return;
   }
@@ -364,12 +364,12 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
       spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
                     "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{}",
                     frame->format, frame->pts, av_q2d(frame->time_base),
-                    av_q2d(audioStream->time_base), frame->buf[0]->size,
+                    av_q2d(audioStreamList[0]->time_base), frame->buf[0]->size,
                     frame->buf[1]->size, frame->nb_samples);
       if (initPts < 0) {
         initPts = frame->pts;
       }
-      frame->time_base = audioStream->time_base;
+      frame->time_base = audioStreamList[0]->time_base;
       if (videoFrameFound) {
         std::lock_guard<std::mutex> lock(audioFrameMtx);
         audioFrameQueue.push_back(
@@ -419,74 +419,73 @@ void decoderThreadFunc() {
       formatContext->probesize = PROBE_SIZE;
     }
 
-    if (videoStream == nullptr || audioStream == nullptr) {
-      if (avformat_find_stream_info(formatContext, nullptr) < 0) {
-        spdlog::error("avformat_find_stream_info error");
-        return;
-      }
-      spdlog::debug("avformat_find_stream_info success");
-      spdlog::debug("nb_streams:{}", formatContext->nb_streams);
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+      spdlog::error("avformat_find_stream_info error");
+      return;
+    }
+    spdlog::debug("avformat_find_stream_info success");
+    spdlog::debug("nb_streams:{}", formatContext->nb_streams);
 
-      // find video stream
-      for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
-        spdlog::debug(
-            "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
-            "dim:{}x{}",
-            i, formatContext->streams[i]->codecpar->codec_type,
-            formatContext->streams[i]->codecpar->codec_tag,
-            avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
-            formatContext->streams[i]->codecpar->video_delay,
-            formatContext->streams[i]->codecpar->width,
-            formatContext->streams[i]->codecpar->height);
+    // find video/audio/caption stream
+    for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
+      spdlog::debug(
+          "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
+          "dim:{}x{}",
+          i, formatContext->streams[i]->codecpar->codec_type,
+          formatContext->streams[i]->codecpar->codec_tag,
+          avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
+          formatContext->streams[i]->codecpar->video_delay,
+          formatContext->streams[i]->codecpar->width,
+          formatContext->streams[i]->codecpar->height);
 
-        if (formatContext->streams[i]->codecpar->codec_type ==
-                AVMEDIA_TYPE_VIDEO &&
-            videoStream == nullptr) {
-          videoStream = formatContext->streams[i];
-        }
-        if (formatContext->streams[i]->codecpar->codec_type ==
-                AVMEDIA_TYPE_AUDIO &&
-            audioStream == nullptr) {
-          audioStream = formatContext->streams[i];
-        }
-        if (formatContext->streams[i]->codecpar->codec_type ==
-                AVMEDIA_TYPE_SUBTITLE &&
-            formatContext->streams[i]->codecpar->codec_id ==
-                AV_CODEC_ID_ARIB_CAPTION &&
-            captionStream == nullptr) {
-          captionStream = formatContext->streams[i];
-        }
+      if (formatContext->streams[i]->codecpar->codec_type ==
+              AVMEDIA_TYPE_VIDEO &&
+          videoStream == nullptr) {
+        videoStream = formatContext->streams[i];
       }
-      if (videoStream == nullptr) {
-        spdlog::error("No video stream ...");
-        return;
+      if (formatContext->streams[i]->codecpar->codec_type ==
+          AVMEDIA_TYPE_AUDIO) {
+        audioStreamList.push_back(formatContext->streams[i]);
       }
-      if (audioStream == nullptr) {
-        spdlog::error("No audio stream ...");
-        return;
+      if (formatContext->streams[i]->codecpar->codec_type ==
+              AVMEDIA_TYPE_SUBTITLE &&
+          formatContext->streams[i]->codecpar->codec_id ==
+              AV_CODEC_ID_ARIB_CAPTION &&
+          captionStream == nullptr) {
+        captionStream = formatContext->streams[i];
       }
-      spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
-                   "colorspace:{}={} colorrange:{}={} delay:{}",
-                   videoStream->index, videoStream->codecpar->codec_id,
-                   avcodec_get_name(videoStream->codecpar->codec_id),
-                   videoStream->codecpar->width, videoStream->codecpar->height,
-                   videoStream->codecpar->color_space,
-                   av_color_space_name(videoStream->codecpar->color_space),
-                   videoStream->codecpar->color_range,
-                   av_color_range_name(videoStream->codecpar->color_range),
-                   videoStream->codecpar->video_delay);
+    }
+    if (videoStream == nullptr) {
+      spdlog::error("No video stream ...");
+      return;
+    }
+    if (audioStreamList.empty()) {
+      spdlog::error("No audio stream ...");
+      return;
+    }
+    spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
+                 "colorspace:{}={} colorrange:{}={} delay:{}",
+                 videoStream->index, videoStream->codecpar->codec_id,
+                 avcodec_get_name(videoStream->codecpar->codec_id),
+                 videoStream->codecpar->width, videoStream->codecpar->height,
+                 videoStream->codecpar->color_space,
+                 av_color_space_name(videoStream->codecpar->color_space),
+                 videoStream->codecpar->color_range,
+                 av_color_range_name(videoStream->codecpar->color_range),
+                 videoStream->codecpar->video_delay);
+    for (auto &&audioStream : audioStreamList) {
       spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
                    "sample_rate:{}",
                    audioStream->index, audioStream->codecpar->codec_id,
                    avcodec_get_name(audioStream->codecpar->codec_id),
                    audioStream->codecpar->channels,
                    audioStream->codecpar->sample_rate);
+    }
 
-      if (captionStream) {
-        spdlog::info("Found caption stream index:{} codecID:{}={}",
-                     captionStream->index, captionStream->codecpar->codec_id,
-                     avcodec_get_name(captionStream->codecpar->codec_id));
-      }
+    if (captionStream) {
+      spdlog::info("Found caption stream index:{} codecID:{}={}",
+                   captionStream->index, captionStream->codecpar->codec_id,
+                   avcodec_get_name(captionStream->codecpar->codec_id));
     }
   }
 
@@ -499,8 +498,7 @@ void decoderThreadFunc() {
 
   // decode phase
   while (!resetedDecoder) {
-    if (videoFrameQueue.size() > 180 || videoPacketQueue.size() > 10 ||
-        bufferedAudioSamples > 48000) {
+    if (videoFrameQueue.size() > 30 || videoPacketQueue.size() > 10) {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
       continue;
     }
@@ -521,7 +519,8 @@ void decoderThreadFunc() {
       videoPacketQueue.push_back(av_packet_clone(&packet));
       videoPacketCv.notify_all();
     }
-    if (packet.stream_index == audioStream->index) {
+    if (packet.stream_index ==
+        audioStreamList[(int)dualMonoMode % audioStreamList.size()]->index) {
       std::lock_guard<std::mutex> lock(audioPacketMtx);
       audioPacketQueue.push_back(av_packet_clone(&packet));
       audioPacketCv.notify_all();
@@ -595,7 +594,7 @@ void decoderMainloop() {
                 videoFrameQueue.size(), audioFrameQueue.size(),
                 videoPacketQueue.size(), audioPacketQueue.size());
 
-  if (videoStream && audioStream && !statsCallback.isNull()) {
+  if (videoStream && !audioStreamList.empty() && !statsCallback.isNull()) {
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now() - startTime);
     auto data = emscripten::val::object();
@@ -669,8 +668,8 @@ void decoderMainloop() {
     // double estimatedAudioPlayTime =
     //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
     double estimatedAudioPlayTime =
-        audioPtsTime -
-        (double)bufferedAudioSamples / audioStream->codecpar->sample_rate;
+        audioPtsTime - (double)bufferedAudioSamples /
+                           audioStreamList[0]->codecpar->sample_rate;
 
     // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
     bool showFlag = estimatedAudioPlayTime > videoPtsTime;
@@ -743,7 +742,7 @@ void decoderMainloop() {
       // double estimatedAudioPlayTime =
       //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
       // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
-      int sampleRate = audioStream->codecpar->sample_rate;
+      int sampleRate = audioStreamList[0]->codecpar->sample_rate;
       double estimatedAudioPlayTime =
           sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
                      : audioPtsTime;

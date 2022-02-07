@@ -625,7 +625,7 @@ const Page: NextPage = () => {
               css={css`
                 width: 100%;
               `}
-              label='音声 主/副'
+              label='音声 0主/副'
               labelId='dualmonomode-label'
               value={dualMonoMode}
               onChange={ev => {
