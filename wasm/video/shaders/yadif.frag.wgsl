@@ -70,7 +70,15 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coo
     var tmp_diff1 = avg(absd(load(prev, x, y - 1), c), absd(load(prev, x, y + 1), e));
     var tmp_diff2 = avg(absd(load(next, x, y - 1), c), absd(load(next, x, y + 1), e));
     var diff = max3(tmp_diff0, tmp_diff1, tmp_diff2);
-    var spatial_pred = avg(c, e);
+
+    var b = avg(load(cur, x, y - 2), load(next, x, y - 2));
+    var f = avg(load(cur, x, y + 2), load(next, x, y + 2));
+    var max_ = max3(d - e, d -c, min(b -c, f - e));
+    var min_ = min3(d - e, d -c, max(b -c, f - e));
+    diff = max3(diff, min_, -max_);
+
+
+    // var spatial_pred_0 = avg(c, e);
     var score_0 =
       absd(load(cur, x - 1, y - 1), load(cur, x - 1, y + 1))
       + absd(c, e)
@@ -81,49 +89,48 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coo
         absd(load(cur, x - 2, y - 1), load(cur, x - 0, y + 1))
       + absd(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1))
       + absd(load(cur, x - 0, y - 1), load(cur, x + 2, y + 1));
-    var spatial_pred_1 = avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1));
-
-    var score_11 = 
-      absd(load(cur, x - 3, y - 1), load(cur, x + 1, y + 1))
-    + absd(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1))
-    + absd(load(cur, x - 1, y - 1), load(cur, x + 3, y + 1));
-    var spatial_pred_11 = avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1));
+    // var spatial_pred_1 = avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1));
 
     var score_2 =
         absd(load(cur, x - 0, y - 1), load(cur, x - 2, y + 1))
       + absd(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1))
       + absd(load(cur, x + 2, y - 1), load(cur, x - 0, y + 1));
-    var spatial_pred_2 = avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1));
-
-    var score_21 = 
-      absd(load(cur, x + 1, y - 1), load(cur, x - 3, y + 1))
-    + absd(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1))
-    + absd(load(cur, x + 3, y - 1), load(cur, x - 1, y + 1));
-    var spatial_pred_21 = avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1));
+    // var spatial_pred_2 = avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1));
 
     if (score_1 < score_0 && score_1 < score_2) {
+      var score_11 = 
+        absd(load(cur, x - 3, y - 1), load(cur, x + 1, y + 1))
+      + absd(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1))
+      + absd(load(cur, x - 1, y - 1), load(cur, x + 3, y + 1));
+      // var spatial_pred_11 = avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1));
       if (score_11 < score_1) {
-        spatial_pred = spatial_pred_11;
+        // spatial_pred = spatial_pred_11;
+        return clamp(avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1)), d - diff, d + diff);
       } else {
-        spatial_pred = spatial_pred_1;
+        // spatial_pred = spatial_pred_1;
+        return clamp(avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1)), d - diff, d + diff);
       }
     } else {
       if (score_2 < score_0 && score_2 < score_1) {
+        var score_21 = 
+          absd(load(cur, x + 1, y - 1), load(cur, x - 3, y + 1))
+        + absd(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1))
+        + absd(load(cur, x + 3, y - 1), load(cur, x - 1, y + 1));
+        // var spatial_pred_21 = avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1));
+
         if (score_21 < score_2) {
-          spatial_pred = spatial_pred_21;
+          // spatial_pred = spatial_pred_21;
+          return clamp(avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1)), d - diff, d + diff);
         } else {
-          spatial_pred = spatial_pred_2;
+          // spatial_pred = spatial_pred_2;
+          return clamp(avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1)), d - diff, d + diff);
         }
+      } else {
+        return clamp(avg(c, e), d - diff, d + diff);
       }
     }
 
-    var b = avg(load(cur, x, y - 2), load(next, x, y - 2));
-    var f = avg(load(cur, x, y + 2), load(next, x, y + 2));
-    var max_ = max3(d - e, d -c, min(b -c, f - e));
-    var min_ = min3(d - e, d -c, max(b -c, f - e));
-    diff = max3(diff, min_, -max_);
-
-    return clamp(spatial_pred, d - diff, d + diff);
+    // return clamp(spatial_pred, d - diff, d + diff);
   }
 }
 
