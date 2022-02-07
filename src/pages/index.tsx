@@ -149,7 +149,7 @@ const Page: NextPage = () => {
     if (!mirakurunServer || !mirakurunOk) {
       return
     }
-    fetch(`${mirakurunServer}/api/services`).then(response => {
+    fetch(`${mirakurunServer}/api/services?type=1`).then(response => {
       if (response.ok && response.body !== null) {
         response.json().then((retval: Array<any>) => {
           const registeredIdMap: { [key: string]: boolean } = {}
