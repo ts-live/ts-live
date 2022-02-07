@@ -56,10 +56,7 @@ fn min3(a: f32, b: f32, c: f32) -> f32 {
   return (min(min(a, b), c));
 }
 
-fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coord: vec2<i32>) -> f32 {
-  var x = coord[0];
-  var y = coord[1];
-
+fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: i32, y: i32) -> f32 {
   if (y % 2 == 0) {
     return load(cur, x, y);
   } else {
@@ -134,15 +131,28 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, coo
   }
 }
 
+fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
+  return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
+}
+
 [[stage(compute), workgroup_size(32, 8, 1)]]
 fn main(
   [[builtin(global_invocation_id)]] coord3: vec3<u32>
 ) {
-  var coord = vec2<i32>(i32(coord3[0]), i32(coord3[1]));
-  var coord2 = vec2<i32>(i32(coord3[0] / 2u), i32(coord3[1] / 2u));
-  var y = yadif(currentY, prevY, nextY, coord) - 16.0 / 255.0;
-  var u = yadif(currentU, prevU, nextU, coord2) - 128.0 / 255.0;
-  var v = yadif(currentV, prevV, nextV, coord2) - 128.0 / 255.0;
-  var rgba = vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
-  textureStore(outputFrame, coord, rgba);
+  var col = i32(coord3[0]);
+  var row = i32(coord3[1]);
+  var u = yadif(currentU, prevU, nextU, col, row) - 128.0 / 255.0;
+  var v = yadif(currentV, prevV, nextV, col, row) - 128.0 / 255.0;
+  var y00 = yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0) - 16.0 / 255.0;
+  var y01 = yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1) - 16.0 / 255.0;
+  var y10 = yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0) - 16.0 / 255.0;
+  var y11 = yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1) - 16.0 / 255.0;
+  var rgba00 = yuv2rgba(y00, u, v);
+  var rgba01 = yuv2rgba(y01, u, v);
+  var rgba10 = yuv2rgba(y10, u, v);
+  var rgba11 = yuv2rgba(y11, u, v);
+  textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), rgba00);
+  textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), rgba01);
+  textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), rgba10);
+  textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), rgba11);
 }
