@@ -68,6 +68,10 @@ const Page: NextPage = () => {
   >()
   const [activeRecordedFileId, setActiveRecordedFileId] = useState<number>()
   const [playMode, setPlayMode] = useState<string>('live')
+  const [dualMonoMode, setDualMonoMode] = useLocalStorage<number>(
+    'tsplayerDualMonoMode',
+    0
+  )
   const [volume, setVolume] = useState<number>(1.0)
 
   const [stopFunc, setStopFunc] = useState(() => () => {})
@@ -110,6 +114,12 @@ const Page: NextPage = () => {
     // mod.setLogLevelDebug()
     return mod
   }, [])
+
+  useEffect(() => {
+    if (!wasmModuleState.value) return
+    if (dualMonoMode === undefined) return
+    wasmModuleState.value.setDualMonoMode(dualMonoMode)
+  }, [wasmModuleState, dualMonoMode])
 
   // const canvasProviderState = useAsync(async () => {
   //   const CanvasProvider = await import('aribb24.js').then(
@@ -220,6 +230,10 @@ const Page: NextPage = () => {
   }, [epgStationServer, epgStationOk])
 
   useEffect(() => {
+    if (!touched) {
+      console.log('not touched')
+      return
+    }
     if (!mirakurunOk || !mirakurunServer || !activeService) {
       console.log(
         'mirakurunServer or activeService',
@@ -306,6 +320,7 @@ const Page: NextPage = () => {
       }
     }, 200)
   }, [
+    touched,
     mirakurunOk,
     epgStationOk,
     activeService,
@@ -596,6 +611,34 @@ const Page: NextPage = () => {
               {activeRecordedFileId !== undefined && (
                 <MenuItem value='file'>ファイル再生</MenuItem>
               )}
+            </Select>
+          </FormControl>
+          <FormControl
+            fullWidth
+            css={css`
+              margin-top: 24px;
+              width: 100%;
+            `}
+          >
+            <InputLabel id='dualmonomode-label'>音声 主/副</InputLabel>
+            <Select
+              css={css`
+                width: 100%;
+              `}
+              label='音声 主/副'
+              labelId='dualmonomode-label'
+              value={dualMonoMode}
+              onChange={ev => {
+                if (
+                  ev.target.value !== null &&
+                  typeof ev.target.value === 'number'
+                ) {
+                  setDualMonoMode(ev.target.value)
+                }
+              }}
+            >
+              <MenuItem value={0}>主</MenuItem>
+              <MenuItem value={1}>副</MenuItem>
             </Select>
           </FormControl>
           <div>

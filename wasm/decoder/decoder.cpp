@@ -41,7 +41,8 @@ size_t inputBufferWriteIndex = 0;
 AVCodecContext *videoCodecContext = nullptr;
 AVCodecContext *audioCodecContext = nullptr;
 
-std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
+std::deque<AVFrame *> videoFrameQueue;
+std::deque<std::pair<bool, AVFrame *>> audioFrameQueue;
 std::deque<std::pair<int64_t, std::vector<uint8_t>>> captionDataQueue;
 std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
@@ -78,6 +79,14 @@ void setCaptionCallback(emscripten::val callback) {
 void setStatsCallback(emscripten::val callback) {
   //
   statsCallback = callback;
+}
+
+enum DualMonoMode { MAIN = 0, SUB = 1 };
+DualMonoMode dualMonoMode = DualMonoMode::MAIN;
+
+void setDualMonoMode(int mode) {
+  //
+  dualMonoMode = (DualMonoMode)mode;
 }
 
 // Buffer control
@@ -166,7 +175,7 @@ void resetInternal() {
   {
     std::lock_guard<std::mutex> lock(audioFrameMtx);
     while (!audioFrameQueue.empty()) {
-      auto frame = audioFrameQueue.front();
+      auto frame = audioFrameQueue.front().second;
       audioFrameQueue.pop_front();
       av_frame_free(&frame);
     }
@@ -317,6 +326,8 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
   // inputBufferReadIndex = 0;
 
   AVFrame *frame = av_frame_alloc();
+  bool isDualMono = false;
+
   while (!terminateFlag) {
     AVPacket *ppacket;
     {
@@ -330,6 +341,18 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
       audioPacketQueue.pop_front();
     }
     AVPacket &packet = *ppacket;
+    for (int idx = 0; idx < packet.size - 3; idx++) {
+      if ((packet.data[idx] == 0xff) &&
+          ((packet.data[idx + 1] & 0xfe) == 0xf8)) {
+        // sync word matched
+        uint8_t channel_configuration = ((packet.data[idx + 2] & 0x01) << 2) |
+                                        ((packet.data[idx + 3] & 0xc0) >> 6);
+        if (channel_configuration == 0) {
+          isDualMono = true;
+        }
+        break;
+      }
+    }
 
     int ret = avcodec_send_packet(audioCodecContext, &packet);
     if (ret != 0) {
@@ -349,7 +372,8 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
       frame->time_base = audioStream->time_base;
       if (videoFrameFound) {
         std::lock_guard<std::mutex> lock(audioFrameMtx);
-        audioFrameQueue.push_back(av_frame_clone(frame));
+        audioFrameQueue.push_back(
+            std::make_pair(isDualMono, av_frame_clone(frame)));
       }
     }
     av_packet_unref(ppacket);
@@ -475,7 +499,8 @@ void decoderThreadFunc() {
 
   // decode phase
   while (!resetedDecoder) {
-    if (videoFrameQueue.size() > 180) {
+    if (videoFrameQueue.size() > 180 || videoPacketQueue.size() > 10 ||
+        bufferedAudioSamples > 48000) {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
       continue;
     }
@@ -603,7 +628,7 @@ void decoderMainloop() {
     }
   }
   while (!audioFrameQueue.empty()) {
-    AVFrame *frame = audioFrameQueue.front();
+    AVFrame *frame = audioFrameQueue.front().second;
     if (frame->time_base.den == 0 || frame->time_base.num == 0) {
       std::lock_guard<std::mutex> lock(audioFrameMtx);
       audioFrameQueue.pop_front();
@@ -633,7 +658,7 @@ void decoderMainloop() {
     // }
 
     // AudioFrameは完全に見るだけ
-    AVFrame *audioFrame = audioFrameQueue.front();
+    AVFrame *audioFrame = audioFrameQueue.front().second;
 
     // VideoとAudioのPTSをクロックから時間に直す
     // TODO: クロック一回転したときの処理
@@ -659,52 +684,6 @@ void decoderMainloop() {
       double timestamp =
           currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
 
-      // // clang-format off
-      // EM_ASM({
-      //   if (Module.canvas.width != $0 || Module.canvas.height != $1) {
-      //     Module.canvas.width = $0;
-      //     Module.canvas.height = $1;
-      //     const scaleX = 1920 / $0;
-      //     const transform = Module.canvas.style.transform;
-      //     if (transform.indexOf('scaleX') < 0) {
-      //       const newTransform = `${transform} scaleX(${1920 / $0})`;
-      //       Module.canvas.style.transform = newTransform;
-      //     } else {
-      //       const re = new RegExp('scaleX.([-0-9.]+).');
-      //       const newTransform = transform.replace(/scaleX.[-0-9.]+./,
-      //       `scaleX(${1920 / $0})`); Module.canvas.style.transform =
-      //       newTransform;
-      //     }
-      //   }
-      // }, currentFrame->width, currentFrame->height);
-      // EM_ASM({
-      //   const videoFrame = new VideoFrame(HEAPU8, {
-      //     format: "I420",
-      //     layout: [
-      //       {
-      //         offset: $1,
-      //         stride: $2
-      //       },
-      //       {
-      //         offset: $3,
-      //         stride: $4
-      //       },
-      //       {
-      //         offset: $5,
-      //         stride: $6
-      //       }
-      //     ],
-      //     codedWidth: Module.canvas.width,
-      //     codedHeight: Module.canvas.height,
-      //     timestamp: $0
-      //   });
-      //   Module.canvasCtx.drawImage(videoFrame, 0, 0);
-      //   videoFrame.close();
-      // }, timestamp,
-      //   currentFrame->data[0], currentFrame->linesize[0],
-      //   currentFrame->data[1], currentFrame->linesize[1],
-      //   currentFrame->data[2], currentFrame->linesize[2]);
-      // // clang-format on
       drawWebGpu(currentFrame);
 
       av_frame_free(&currentFrame);
@@ -714,23 +693,31 @@ void decoderMainloop() {
   // AudioFrameはVideoFrame処理でのPTS参照用に1個だけキューに残す
   while (audioFrameQueue.size() > 1) {
     AVFrame *frame = nullptr;
+    bool isDualMono = false;
     {
       std::lock_guard<std::mutex> lock(audioFrameMtx);
-      frame = audioFrameQueue.front();
+      isDualMono = audioFrameQueue.front().first;
+      frame = audioFrameQueue.front().second;
       audioFrameQueue.pop_front();
     }
     spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{}",
                   frame->pts, av_q2d(frame->time_base), frame->nb_samples);
 
-    if (frame->channels == 2) {
-      feedAudioData(reinterpret_cast<float *>(frame->buf[0]->data),
-                    reinterpret_cast<float *>(frame->buf[1]->data),
-                    frame->nb_samples);
-    } else {
-      feedAudioData(reinterpret_cast<float *>(frame->buf[0]->data),
-                    reinterpret_cast<float *>(frame->buf[0]->data),
-                    frame->nb_samples);
+    auto data0 = frame->data[0];
+    auto data1 = frame->data[1];
+
+    if (isDualMono) {
+      if (dualMonoMode == DualMonoMode::MAIN) {
+        data1 = data0;
+      } else {
+        data0 = data1;
+      }
     }
+    if (frame->channels == 1) {
+      data1 = data0;
+    }
+    feedAudioData(reinterpret_cast<float *>(data0),
+                  reinterpret_cast<float *>(data1), frame->nb_samples);
 
     av_frame_free(&frame);
   }
@@ -747,7 +734,7 @@ void decoderMainloop() {
 
       // AudioFrameは完全に見るだけ
       assert(!audioFrameQueue.empty());
-      AVFrame *audioFrame = audioFrameQueue.front();
+      AVFrame *audioFrame = audioFrameQueue.front().second;
       // VideoとAudioのPTSをクロックから時間に直す
       // TODO: クロック一回転したときの処理
       double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);

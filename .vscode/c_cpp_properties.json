@@ -4,9 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/wasm/",
                 "${workspaceFolder}/wasm/build/",
-                "${workspaceFolder}/wasm/build/halide_lib",
-                "${workspaceFolder}/wasm/build/host_tools/_deps/halide-build/include/",
                 "${HOME}/ghq/github.com/emscripten-core/emsdk/upstream/emscripten/system/include/"
             ],
             "defines": [
@@ -17,7 +16,11 @@
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-clang-x64",
-            "compileCommands": "${workspaceFolder}/wasm/build/compile_commands.json"
+            "compileCommands": "",
+            "mergeConfigurations": false,
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            }
         }
     ],
     "version": 4
