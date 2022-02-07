@@ -41,11 +41,11 @@ fn load(tex: texture_2d<f32>, x: i32, y: i32) -> f32 {
 }
 
 fn avg(a: f32, b: f32) -> f32 {
-  return a / 2.0 + b / 2.0;
+  return (a + b) * 0.5;
 }
 
 fn absd(a: f32, b: f32) -> f32 {
-  return abs(a - b);
+  return max(a, b) - min(a, b);
 }
 
 fn max3(a: f32, b: f32, c: f32) -> f32 {
