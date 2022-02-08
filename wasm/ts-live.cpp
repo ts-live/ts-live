@@ -87,4 +87,5 @@ EMSCRIPTEN_BINDINGS(ts_live_module) {
   emscripten::function("setLogLevelInfo", &setLogLevelInfo);
   emscripten::function("setBufferedAudioSamples", &setBufferedAudioSamples);
   emscripten::function("setAudioGain", &setAudioGain);
+  emscripten::function("setDualMonoMode", &setDualMonoMode);
 }
