@@ -70,6 +70,8 @@ emscripten::val statsCallback = emscripten::val::null();
 const size_t donwloadRangeSize = 2 * 1024 * 1024;
 size_t downloadCount = 0;
 
+int updateStreamInfoCount = 0;
+
 // Callback register
 void setCaptionCallback(emscripten::val callback) {
   captionCallback = callback;
@@ -383,6 +385,78 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
   avcodec_free_context(&audioCodecContext);
 }
 
+void updateStreamInfo(AVFormatContext *formatContext, bool showStreamInfo) {
+  // probe phase
+  audioStreamList.clear();
+  {
+    av_log_set_level(AV_LOG_ERROR);
+    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
+      spdlog::error("avformat_find_stream_info error");
+      return;
+    }
+    av_log_set_level(AV_LOG_WARNING);
+    spdlog::debug("avformat_find_stream_info success");
+    spdlog::debug("nb_streams:{}", formatContext->nb_streams);
+
+    // find video/audio/caption stream
+    for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
+      if (showStreamInfo) {
+        spdlog::info(
+            "stream[{}]: codec_type:{} tag:{:x} codec:{}={} video_delay:{} "
+            "dim:{}x{}",
+            i, formatContext->streams[i]->codecpar->codec_type,
+            formatContext->streams[i]->codecpar->codec_tag,
+            formatContext->streams[i]->codecpar->codec_id,
+            avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
+            formatContext->streams[i]->codecpar->video_delay,
+            formatContext->streams[i]->codecpar->width,
+            formatContext->streams[i]->codecpar->height);
+      }
+
+      if (formatContext->streams[i]->codecpar->codec_type ==
+          AVMEDIA_TYPE_VIDEO) {
+        videoStream = formatContext->streams[i];
+      }
+      if (formatContext->streams[i]->codecpar->codec_type ==
+          AVMEDIA_TYPE_AUDIO) {
+        audioStreamList.push_back(formatContext->streams[i]);
+      }
+      if (formatContext->streams[i]->codecpar->codec_type ==
+              AVMEDIA_TYPE_SUBTITLE &&
+          formatContext->streams[i]->codecpar->codec_id ==
+              AV_CODEC_ID_ARIB_CAPTION) {
+        captionStream = formatContext->streams[i];
+      }
+    }
+    if (showStreamInfo) {
+      spdlog::debug("Found video stream index:{} codec:{}={} dim:{}x{} "
+                    "colorspace:{}={} colorrange:{}={} delay:{}",
+                    videoStream->index, videoStream->codecpar->codec_id,
+                    avcodec_get_name(videoStream->codecpar->codec_id),
+                    videoStream->codecpar->width, videoStream->codecpar->height,
+                    videoStream->codecpar->color_space,
+                    av_color_space_name(videoStream->codecpar->color_space),
+                    videoStream->codecpar->color_range,
+                    av_color_range_name(videoStream->codecpar->color_range),
+                    videoStream->codecpar->video_delay);
+      for (auto &&audioStream : audioStreamList) {
+        spdlog::debug("Found audio stream index:{} codecID:{}={} channels:{} "
+                      "sample_rate:{}",
+                      audioStream->index, audioStream->codecpar->codec_id,
+                      avcodec_get_name(audioStream->codecpar->codec_id),
+                      audioStream->codecpar->channels,
+                      audioStream->codecpar->sample_rate);
+      }
+
+      if (captionStream) {
+        spdlog::debug("Found caption stream index:{} codecID:{}={}",
+                      captionStream->index, captionStream->codecpar->codec_id,
+                      avcodec_get_name(captionStream->codecpar->codec_id));
+      }
+    }
+  }
+}
+
 // decoder
 void decoderThreadFunc() {
   spdlog::info("Decoder Thread started.");
@@ -395,97 +469,26 @@ void decoderThreadFunc() {
 
   AVFrame *frame = nullptr;
 
-  // probe phase
-  {
-    // probe
-    if (ibuf == nullptr) {
-      ibuf = static_cast<uint8_t *>(av_malloc(ibufSize));
-    }
-    if (avioContext == nullptr) {
-      avioContext = avio_alloc_context(ibuf, ibufSize, 0, 0, &read_packet,
-                                       nullptr, nullptr);
-    }
-    if (formatContext == nullptr) {
-      formatContext = avformat_alloc_context();
-      formatContext->pb = avioContext;
-      spdlog::debug("calling avformat_open_input");
-
-      if (avformat_open_input(&formatContext, nullptr, nullptr, nullptr) != 0) {
-        spdlog::error("avformat_open_input error");
-        return;
-      }
-      spdlog::debug("open success");
-    }
-
-    if (avformat_find_stream_info(formatContext, nullptr) < 0) {
-      spdlog::error("avformat_find_stream_info error");
-      return;
-    }
-    spdlog::debug("avformat_find_stream_info success");
-    spdlog::debug("nb_streams:{}", formatContext->nb_streams);
-
-    // find video/audio/caption stream
-    for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
-      spdlog::debug(
-          "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
-          "dim:{}x{}",
-          i, formatContext->streams[i]->codecpar->codec_type,
-          formatContext->streams[i]->codecpar->codec_tag,
-          avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
-          formatContext->streams[i]->codecpar->video_delay,
-          formatContext->streams[i]->codecpar->width,
-          formatContext->streams[i]->codecpar->height);
-
-      if (formatContext->streams[i]->codecpar->codec_type ==
-              AVMEDIA_TYPE_VIDEO &&
-          videoStream == nullptr) {
-        videoStream = formatContext->streams[i];
-      }
-      if (formatContext->streams[i]->codecpar->codec_type ==
-          AVMEDIA_TYPE_AUDIO) {
-        audioStreamList.push_back(formatContext->streams[i]);
-      }
-      if (formatContext->streams[i]->codecpar->codec_type ==
-              AVMEDIA_TYPE_SUBTITLE &&
-          formatContext->streams[i]->codecpar->codec_id ==
-              AV_CODEC_ID_ARIB_CAPTION &&
-          captionStream == nullptr) {
-        captionStream = formatContext->streams[i];
-      }
-    }
-    if (videoStream == nullptr) {
-      spdlog::error("No video stream ...");
-      return;
-    }
-    if (audioStreamList.empty()) {
-      spdlog::error("No audio stream ...");
-      return;
-    }
-    spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
-                 "colorspace:{}={} colorrange:{}={} delay:{}",
-                 videoStream->index, videoStream->codecpar->codec_id,
-                 avcodec_get_name(videoStream->codecpar->codec_id),
-                 videoStream->codecpar->width, videoStream->codecpar->height,
-                 videoStream->codecpar->color_space,
-                 av_color_space_name(videoStream->codecpar->color_space),
-                 videoStream->codecpar->color_range,
-                 av_color_range_name(videoStream->codecpar->color_range),
-                 videoStream->codecpar->video_delay);
-    for (auto &&audioStream : audioStreamList) {
-      spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
-                   "sample_rate:{}",
-                   audioStream->index, audioStream->codecpar->codec_id,
-                   avcodec_get_name(audioStream->codecpar->codec_id),
-                   audioStream->codecpar->channels,
-                   audioStream->codecpar->sample_rate);
-    }
-
-    if (captionStream) {
-      spdlog::info("Found caption stream index:{} codecID:{}={}",
-                   captionStream->index, captionStream->codecpar->codec_id,
-                   avcodec_get_name(captionStream->codecpar->codec_id));
-    }
+  if (ibuf == nullptr) {
+    ibuf = static_cast<uint8_t *>(av_malloc(ibufSize));
   }
+  if (avioContext == nullptr) {
+    avioContext = avio_alloc_context(ibuf, ibufSize, 0, 0, &read_packet,
+                                     nullptr, nullptr);
+  }
+  if (formatContext == nullptr) {
+    formatContext = avformat_alloc_context();
+    formatContext->pb = avioContext;
+    spdlog::debug("calling avformat_open_input");
+
+    if (avformat_open_input(&formatContext, nullptr, nullptr, nullptr) != 0) {
+      spdlog::error("avformat_open_input error");
+      return;
+    }
+    spdlog::debug("open success");
+  }
+  // formatContext->probesize = 2 * 1024 * 1024;
+  updateStreamInfo(formatContext, true);
 
   bool videoTerminateFlag = false;
   bool audioTerminateFlag = false;
@@ -494,11 +497,25 @@ void decoderThreadFunc() {
   std::thread audioDecoderThread =
       std::thread([&]() { audioDecoderThreadFunc(audioTerminateFlag); });
 
+  auto lastUpdateTime = std::chrono::system_clock::now();
+  int processedPacketSize = 0;
+
   // decode phase
   while (!resetedDecoder) {
-    if (videoFrameQueue.size() > 30 || videoPacketQueue.size() > 10) {
+    if ((videoPacketQueue.size() > 30 || videoFrameQueue.size() > 60) &&
+        bufferedAudioSamples > 24000) {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
       continue;
+    }
+    auto currentTime = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        currentTime - lastUpdateTime);
+    if (duration.count() > 100) {
+      // if (processedPacketSize > 5 * formatContext->probesize) {
+      updateStreamInfoCount++;
+      updateStreamInfo(formatContext, false);
+      processedPacketSize = 0;
+      lastUpdateTime = std::chrono::system_clock::now();
     }
     // decode frames
     if (frame == nullptr) {
@@ -512,6 +529,7 @@ void decoderThreadFunc() {
       spdlog::info("av_read_frame: {} {}", ret, av_err2str(ret));
       continue;
     }
+    processedPacketSize += packet.size;
     if (packet.stream_index == videoStream->index) {
       std::lock_guard<std::mutex> lock(videoPacketMtx);
       videoPacketQueue.push_back(av_packet_clone(&packet));
@@ -599,11 +617,14 @@ void decoderMainloop() {
     auto data = emscripten::val::object();
     data.set("time", duration.count() / 1000.0);
     data.set("VideoFrameQueueSize", videoFrameQueue.size());
+    data.set("VideoPacketQueueSize", videoPacketQueue.size());
     data.set("AudioFrameQueueSize", audioFrameQueue.size());
+    data.set("AudioPacketQueueSize", audioPacketQueue.size());
     data.set("AudioWorkletBufferSize", bufferedAudioSamples);
     data.set("InputBufferSize", inputBufferWriteIndex - inputBufferReadIndex);
     data.set("CaptionDataQueueSize",
              captionStream ? captionDataQueue.size() : 0);
+    data.set("UpdateStreamInfoCount", updateStreamInfoCount);
     statsBuffer.push_back(std::move(data));
     if (statsBuffer.size() >= 6) {
       auto statsArray = emscripten::val::array();

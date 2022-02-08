@@ -803,8 +803,31 @@ const Page: NextPage = () => {
             <Line
               type='linear'
               dataKey='VideoFrameQueueSize'
-              name='Video Queue Size'
+              name='Video Frame Queue Size'
               stroke='#8884d8'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+            css={css`
+              position: absolute;
+              left: 0px;
+              top: 0px;
+            `}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='VideoPacketQueueSize'
+              name='Video Packet Queue Size'
+              stroke='#d384d8'
               isAnimationActive={false}
               dot={false}
             />
@@ -838,9 +861,9 @@ const Page: NextPage = () => {
             <Legend />
             <Line
               type='linear'
-              dataKey='CaptionDataQueueSize'
-              name='Caption Data Size'
-              stroke='#9dca82'
+              dataKey='AudioPacketQueueSize'
+              name='Audio Packet Queue Size'
+              stroke='#6383ca'
               isAnimationActive={false}
               dot={false}
             />
@@ -859,6 +882,42 @@ const Page: NextPage = () => {
               dataKey='AudioWorkletBufferSize'
               name='AudioWorklet Buffer Size'
               stroke='#9d82ca'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='CaptionDataQueueSize'
+              name='Caption Data Queue Size'
+              stroke='#9dca82'
+              isAnimationActive={false}
+              dot={false}
+            />
+          </LineChart>
+          <LineChart
+            width={550}
+            height={250}
+            data={showCharts ? chartData : []}
+          >
+            <CartesianGrid strokeDasharray={'3 3'} />
+            <XAxis dataKey='time' />
+            <YAxis />
+            <Legend />
+            <Line
+              type='linear'
+              dataKey='UpdateStreamInfoCount'
+              name='UpdateStreamInfo Count'
+              stroke='#82ca9d'
               isAnimationActive={false}
               dot={false}
             />
