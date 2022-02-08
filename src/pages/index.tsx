@@ -26,15 +26,9 @@ import Head from 'next/head'
 import { WasmModule, StatsData } from '../lib/wasmmodule'
 import dayjs from 'dayjs'
 
-const Caption = dynamic(() => import('../components/caption'), { ssr: false })
+import { Program, Service } from 'mirakurun/api'
 
-declare interface TvService {
-  id: number
-  name: string
-  serviceId: number
-  networkId: number
-  hasLogoData: boolean
-}
+const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
 declare interface EpgRecordedFile {
   id: number
@@ -51,11 +45,13 @@ const Page: NextPage = () => {
   )
   const [mirakurunOk, setMirakurunOk] = useState<boolean>(false)
   const [mirakurunVersion, setMirakurunVersion] = useState<string>('unknown')
-  const [tvServices, setTvServices] = useState<Array<TvService>>([])
-  const [activeService, setActiveService] = useLocalStorage<number>(
-    'mirakurunActiveService',
+  const [tvServices, setTvServices] = useState<Array<Service>>([])
+  const [activeService, setActiveService] = useLocalStorage<Service>(
+    'tsplayerActiveService',
     undefined
   )
+  const [programs, setPrograms] = useState<Array<Program>>([])
+  const [currentProgram, setCurrentProgram] = useState<Program>()
 
   const [epgStationServer, setEpgStationServer] = useLocalStorage<string>(
     'tsplayerEpgStationServer',
@@ -187,6 +183,51 @@ const Page: NextPage = () => {
   }, [mirakurunOk, mirakurunServer])
 
   useEffect(() => {
+    if (!mirakurunServer || !mirakurunOk) {
+      return
+    }
+    fetch(`${mirakurunServer}/api/programs`).then(response => {
+      if (response.ok && response.body !== null) {
+        response.json().then((retVal: Array<Program>) => {
+          setPrograms(retVal)
+        })
+      }
+    })
+  }, [mirakurunOk, mirakurunServer])
+
+  const findCurrentProgram = (
+    programs: Array<Program>,
+    activeService: Service
+  ) => {
+    const currentTime = Date.now()
+    const current = programs.find(v => {
+      if (
+        v.networkId === activeService.networkId &&
+        v.serviceId === activeService.serviceId &&
+        v.startAt <= currentTime &&
+        currentTime < v.startAt + v.duration
+      ) {
+        return true
+      } else {
+        return false
+      }
+    })
+    if (current !== undefined) {
+      setCurrentProgram(current)
+      setTimeout(() => {
+        setPrograms(prev => [...prev.filter(p => p.id !== current.id)])
+      }, current.startAt + current.duration - currentTime)
+    }
+  }
+
+  useEffect(() => {
+    if (!activeService) {
+      return
+    }
+    findCurrentProgram(programs, activeService)
+  }, [programs, activeService])
+
+  useEffect(() => {
     if (!epgStationServer) return
     fetch(`${epgStationServer}/api/version`)
       .then(response => {
@@ -277,7 +318,7 @@ const Page: NextPage = () => {
           Module.reset()
           console.log('abort fetch done.')
         })
-        const url = `${mirakurunServer}/api/services/${activeService}/stream`
+        const url = `${mirakurunServer}/api/services/${activeService.id}/stream`
         console.log('start fetch', url, Module)
         fetch(url, {
           signal: ac.signal,
@@ -396,7 +437,10 @@ const Page: NextPage = () => {
       `}
     >
       <Head>
-        <title>TS-Live!</title>
+        <title>
+          TS-Live!{' '}
+          {currentProgram && currentProgram.name && `| ${currentProgram.name}`}
+        </title>
         <meta
           httpEquiv='origin-trial'
           content='Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
@@ -477,7 +521,7 @@ const Page: NextPage = () => {
               labelId='services-label'
               defaultValue={
                 activeService
-                  ? activeService
+                  ? activeService.id
                   : tvServices.length > 0
                   ? tvServices[0].id
                   : null
@@ -485,9 +529,11 @@ const Page: NextPage = () => {
               onChange={ev => {
                 if (
                   ev.target.value !== null &&
-                  typeof ev.target.value === 'number'
+                  typeof (ev.target.value === 'number')
                 ) {
-                  setActiveService(ev.target.value)
+                  const id = ev.target.value
+                  const active = tvServices.find(v => v.id === id)
+                  if (active) setActiveService(active)
                 }
                 setDrawer(false)
               }}
@@ -500,7 +546,7 @@ const Page: NextPage = () => {
               margin-top: 16px;
             `}
           >
-            Active Service: {activeService}
+            Active Service: {activeService && activeService.name}
           </div>
           <div
             css={css`
