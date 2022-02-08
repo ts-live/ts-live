@@ -23,7 +23,7 @@ void feedAudioData(float *buffer0, float *buffer1, int samples) {
         type: 'feed',
         buffer0: buffer0,
         buffer1: buffer1
-      });
+      }, [buffer0.buffer, buffer1.buffer]);
     }
   }, buffer0, buffer1, samples);
   // clang-format on
