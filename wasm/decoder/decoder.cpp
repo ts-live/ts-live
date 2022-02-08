@@ -519,8 +519,9 @@ void decoderThreadFunc() {
       videoPacketQueue.push_back(av_packet_clone(&packet));
       videoPacketCv.notify_all();
     }
-    if (packet.stream_index ==
-        audioStreamList[(int)dualMonoMode % audioStreamList.size()]->index) {
+    if (audioStreamList.size() > 0 &&
+        (packet.stream_index ==
+         audioStreamList[(int)dualMonoMode % audioStreamList.size()]->index)) {
       std::lock_guard<std::mutex> lock(audioPacketMtx);
       audioPacketQueue.push_back(av_packet_clone(&packet));
       audioPacketCv.notify_all();
