@@ -23,7 +23,6 @@ extern "C" {
 }
 
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
-const size_t PROBE_SIZE = 1024 * 1024;
 const size_t DEFAULT_WIDTH = 1920;
 const size_t DEFAULT_HEIGHT = 1080;
 
@@ -416,7 +415,6 @@ void decoderThreadFunc() {
         return;
       }
       spdlog::debug("open success");
-      formatContext->probesize = PROBE_SIZE;
     }
 
     if (avformat_find_stream_info(formatContext, nullptr) < 0) {
