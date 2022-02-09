@@ -17,11 +17,17 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
   GIT_TAG 8.0.1
 )
+FetchContent_Declare(
+  tsreadex
+  GIT_REPOSITORY https://github.com/xtne6f/tsreadex.git
+  GIT_TAG d2a2ae460c98bc7e463b60c03edc1c9380208a00
+  PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex.patch
+)
 set(BENCHMARK_ENABLE_TESTING OFF)
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(EXTRA_CFLAGS "-Wno-error=declaration-after-statement")
-FetchContent_MakeAvailable(fmt spdlog)
+FetchContent_MakeAvailable(fmt spdlog tsreadex)
 
 set(FFMPEG_CONFIGURE_COMMAND_LIST
   emconfigure ./configure
@@ -88,7 +94,7 @@ add_dependencies(ts-live ffmpeg)
 target_compile_options(ts-live PUBLIC -matomics -mbulk-memory)
 target_compile_features(ts-live PRIVATE cxx_std_20)
 target_include_directories(ts-live PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)
-target_link_libraries(ts-live fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} embind)
+target_link_libraries(ts-live fmt::fmt spdlog::spdlog ${FFMPEG_LIBRARIES} embind tsreadex::lib)
 target_link_options(ts-live PRIVATE
   "-Wno-pthreads-mem-growth"
   "SHELL:-s ALLOW_MEMORY_GROWTH=1"

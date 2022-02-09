@@ -22,6 +22,11 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 }
 
+// tsreadex
+#include <servicefilter.hpp>
+
+CServiceFilter servicefilter;
+
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 const size_t PROBE_SIZE = 1024 * 1024;
 const size_t DEFAULT_WIDTH = 1920;
@@ -119,10 +124,26 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
     spdlog::debug("resetedDecoder detected in read_packet");
     return -1;
   }
-  memcpy(buf, &inputBuffer[inputBufferReadIndex], bufSize);
-  inputBufferReadIndex += bufSize;
+
+  // 0x47: TS packet header sync_byte
+  while (inputBuffer[inputBufferReadIndex] != 0x47 &&
+         inputBufferReadIndex < inputBufferWriteIndex) {
+    inputBufferReadIndex++;
+  }
+  // servicefilterに1パケット（188バイト）だけ入れたからといって、
+  // 出てくるのは1パケットとは限らない。色々追加される可能性がある
+  while (inputBufferReadIndex + 188 < inputBufferWriteIndex &&
+         servicefilter.GetPackets().size() < bufSize - 10 * 188) {
+    servicefilter.AddPacket(&inputBuffer[inputBufferReadIndex]);
+    inputBufferReadIndex += 188;
+  }
+  auto packets = servicefilter.GetPackets();
+  int copySize = packets.size();
+  memcpy(buf, &packets[0], copySize);
+  servicefilter.ClearPackets();
+
   waitCv.notify_all();
-  return bufSize;
+  return copySize;
 }
 
 void commitInputData(size_t nextSize) {
@@ -587,7 +608,14 @@ void initDecoder() {
       decoderThreadFunc();
     }
   });
+
+  servicefilter.SetProgramNumberOrIndex(-1);
+  servicefilter.SetAudio1Mode(13);
+  servicefilter.SetAudio2Mode(7);
+  servicefilter.SetCaptionMode(1);
+  servicefilter.SetSuperimposeMode(2);
 }
+
 
 void decoderMainloop() {
   spdlog::debug("decoderMainloop videoFrameQueue:{} audioFrameQueue:{} "
