@@ -157,7 +157,7 @@ const Page: NextPage = () => {
     }
     fetch(`${mirakurunServer}/api/services?type=1`).then(response => {
       if (response.ok && response.body !== null) {
-        response.json().then((retval: Array<any>) => {
+        response.json().then((retval: Array<Service>) => {
           const registeredIdMap: { [key: string]: boolean } = {}
           setTvServices(
             retval
@@ -165,17 +165,11 @@ const Page: NextPage = () => {
                 if (v.id in registeredIdMap) {
                   return null
                 } else {
-                  registeredIdMap[v.id as string] = true
-                  return {
-                    id: v.id,
-                    serviceId: v.serviceId,
-                    networkId: v.networkId,
-                    name: v.name,
-                    hasLogoData: v.hasLogoData
-                  }
+                  registeredIdMap[v.id] = true
+                  return v
                 }
               })
-              .filter(v => v) as Array<TvService>
+              .filter(v => v) as Array<Service>
           )
         })
       }
