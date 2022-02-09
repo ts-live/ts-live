@@ -9,6 +9,7 @@ import React, {
 } from 'react'
 import { WasmModule } from '../lib/wasmmodule'
 import { CanvasProvider } from 'aribb24.js'
+import { Service } from 'mirakurun/api'
 
 type Props = {
   //
@@ -16,7 +17,7 @@ type Props = {
   canvasRef: RefObject<HTMLCanvasElement>
   width?: number
   height?: number
-  service: number | undefined
+  service: Service | undefined
 }
 
 const Caption: React.FC<Props> = ({
