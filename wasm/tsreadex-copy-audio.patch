@@ -1,0 +1,61 @@
+diff --git a/Readme.txt b/Readme.txt
+index 4cc82dd..45703c9 100644
+--- a/Readme.txt
++++ b/Readme.txt
+@@ -56,8 +56,9 @@ tsreadex [-z ignored][-s seek][-l limit][-t timeout][-m mode][-x pids][-n prog_n
+   +8のとき、デュアルモノ(ARIB STD-B32)を2つのモノラル音声に分離し、右音声を第2音声として扱う(AACのみ)。
+ 
+ -b aud2, range=0 or 1 or 2 [+4], default=0
+-  第2音声をそのままか、補完するか、削除するか。
++  第2音声をそのままか、補完するか、削除するか、第1音声をコピーするか。
+   1のとき、ストリームが存在しなければPMTの項目を補って無音のAACストリームを挿入する。
++  3のとき、ストリームが存在しなければ第1音声をコピーする。
+   +4のとき、モノラルであればステレオにする(AACのみ)。
+ 
+ -c cap, range=0 or 1 or 2, default=0
+diff --git a/servicefilter.cpp b/servicefilter.cpp
+index cda1cbc..f75dcc1 100644
+--- a/servicefilter.cpp
++++ b/servicefilter.cpp
+@@ -129,6 +129,9 @@ void CServiceFilter::AddPacket(const uint8_t *packet)
+                     m_isAudio1DualMono = m_audio1MuxDualMono && m_audio1StreamType == ADTS_TRANSPORT && TransmuxDualMono(m_audio1UnitPackets);
+                     if (m_isAudio1DualMono || (m_audio1MuxToStereo && m_audio1StreamType == ADTS_TRANSPORT &&
+                             TransmuxMonoToStereo(m_audio1UnitPackets, m_audio1MuxWorkspace, 0x0110, m_audio1PesCounter, m_audio1PtsPcrDiff))) {
++                        if (m_audio2Mode == 3 && m_audio2Pid == 0) {
++                            TransmuxMonoToStereo(m_audio1UnitPackets, m_audio1MuxWorkspace, 0x0111, m_audio1PesCounter, m_audio1PtsPcrDiff);
++                        }
+                         // Already added
+                         m_audio1UnitPackets.clear();
+                     }
+@@ -143,6 +146,9 @@ void CServiceFilter::AddPacket(const uint8_t *packet)
+                         }
+                         m_audio1PesCounter = (m_audio1PesCounter + 1) & 0x0f;
+                         ChangePidAndAddPacket(packet_, 0x0110, m_audio1PesCounter);
++                        if (m_audio2Mode == 3 && m_audio2Pid == 0) {
++                            ChangePidAndAddPacket(packet_, 0x0111, m_audio1PesCounter);
++                        }
+                     }
+                     m_audio1UnitPackets.clear();
+                 }
+@@ -401,7 +407,7 @@ void CServiceFilter::AddPmt(const PSI &psi)
+             m_buf[10] = 0x00;
+         }
+     }
+-    bool addAudio2 = m_audio2Pid != 0 || m_audio2Mode == 1 || (m_audio2Mode != 2 && m_isAudio1DualMono);
++    bool addAudio2 = m_audio2Pid != 0 || m_audio2Mode == 1 || m_audio2Mode == 3 || (m_audio2Mode != 2 && m_isAudio1DualMono);
+     if (m_audio1Pid != 0 || m_audio1Mode == 1) {
+         m_buf.push_back(m_audio1StreamType);
+         // PID=0x0110
+diff --git a/tsreadex.cpp b/tsreadex.cpp
+index afa8bfd..feb7bad 100644
+--- a/tsreadex.cpp
++++ b/tsreadex.cpp
+@@ -213,7 +213,7 @@ int main(int argc, char **argv)
+                     servicefilter.SetAudio1Mode(mode);
+                 }
+                 else if (c == 'b') {
+-                    invalid = !(0 <= mode && mode <= 6 && mode % 4 <= 2);
++                    invalid = !(0 <= mode && mode <= 7 && mode % 4 <= 3);
+                     servicefilter.SetAudio2Mode(mode);
+                 }
+                 else {
