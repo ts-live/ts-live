@@ -312,7 +312,7 @@ const Page: NextPage = () => {
           Module.reset()
           console.log('abort fetch done.')
         })
-        const url = `${mirakurunServer}/api/services/${activeService.id}/stream`
+        const url = `${mirakurunServer}/api/services/${activeService.id}/stream?decode=1`
         console.log('start fetch', url, Module)
         fetch(url, {
           signal: ac.signal,
