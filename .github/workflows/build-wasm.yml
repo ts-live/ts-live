@@ -11,7 +11,7 @@ on:
       - 'wasm/**'
 
 jobs:
-  build-wasm:
+  buildwasm:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
