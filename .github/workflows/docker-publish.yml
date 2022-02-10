@@ -8,10 +8,14 @@ name: Docker
 on:
   push:
     branches: [main]
+    paths-ignore:
+      '*.md'
   release:
     types: [published]
   pull_request:
     branches: [main]
+    paths-ignore:
+      '*.md'
 
 env:
   # Use docker.io for Docker Hub if empty
