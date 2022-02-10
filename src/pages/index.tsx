@@ -528,6 +528,7 @@ const Page: NextPage = () => {
                   const id = ev.target.value
                   const active = tvServices.find(v => v.id === id)
                   if (active) setActiveService(active)
+                  setTouched(true)
                 }
                 setDrawer(false)
               }}
