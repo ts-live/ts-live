@@ -3,8 +3,12 @@ name: Wasm
 on:
   push:
     branches: [main]
+    paths:
+      - 'wasm/**'
   pull_request:
     branches: [main]
+    paths:
+      - 'wasm/**'
 
 jobs:
   build-wasm:
