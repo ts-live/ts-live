@@ -17,6 +17,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
+    - name: Run clang-format style check for C/C++/Protobuf programs.
+      uses: jidicula/clang-format-action@v4.5.0
+      with:
+        clang-format-version: '10'
+        check-path: ./wasm
+
       - name: Setup emsdk
         uses: mymindstorm/setup-emsdk@v11
         with:
