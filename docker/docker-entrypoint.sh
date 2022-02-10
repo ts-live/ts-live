@@ -62,13 +62,8 @@ elif [ "${CERT_PROVIDER}" = "tailscale" ]; then
   cp -f /template/supervisord_tailscale.conf /etc/supervisord.conf
 
   (
-    while : ; do
-      if tailscale status > /dev/null; then
-        /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME}
-        break
-      else
-        sleep 1
-      fi
+    until /usr/bin/tailscale up --authkey ${TAILSCALE_AUTHKEY} --hostname ${TAILSCALE_HOSTNAME} ; do
+      sleep 1
     done
     /usr/bin/tailscale cert --cert-file /etc/nginx/ssl/tailscale.cer --key-file /etc/nginx/ssl/tailscale.key ${FQDN}
     /usr/local/bin/supervisorctl start nginx
