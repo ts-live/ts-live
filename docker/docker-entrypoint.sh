@@ -102,4 +102,3 @@ if [ -n "${USE_EPGSTATION}" ]; then
 fi
 
 exec /usr/local/bin/supervisord --nodaemon -c /etc/supervisord.conf
-
