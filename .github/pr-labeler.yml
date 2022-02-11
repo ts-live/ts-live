@@ -1,6 +1,0 @@
-feature: ['feature/*', 'feat/*', 'feature-*', 'feat-*']
-bug: ['fix/*', 'fix-*']
-chore: ['chore/*', 'chore-*']
-refactor: ['refactor/*', 'refactoring/*', 'refactor-*', 'refactoring-*']
-documentation: ['documentation/*', 'doc/*', 'documentation-*', 'doc-*']
-enhancement: ['enhancement/*', 'improve/*', 'enhancement-*', 'improve-*']
