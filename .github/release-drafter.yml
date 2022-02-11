@@ -1,5 +1,6 @@
 name-template: 'v$RESOLVED_VERSION 🌈'
 tag-template: 'v$RESOLVED_VERSION'
+
 categories:
   - title: '🚀 Features'
     labels:
@@ -20,8 +21,11 @@ categories:
     label: 'documentation'
   - title: '⛓️ Dependency update'
     label: 'dependencies'
+
 change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+
 change-title-escapes: '\<*_&' # You can add # and @ to disable mentions, and add ` to disable code blocks.
+
 version-resolver:
   major:
     labels:
@@ -33,7 +37,51 @@ version-resolver:
     labels:
       - 'patch'
   default: patch
+
 template: |
   ## Changes
 
   $CHANGES
+
+autolabeler:
+  - label: feature
+    branch:
+      - '/^feat(ure)?[/-].+/'
+  - label: bug
+    branch:
+      - '/^fix[/-].+/'
+  - label: chore
+    branch:
+      - '/^chore[/-].+/'
+  - label: refactor
+    branch:
+      - '/(refactor|refactoring)[/-].+/'
+  - label: documentation
+    branch:
+      - '/doc(umentation)[/-].+/'
+    files:
+      - '*.md'
+  - label: enhancement
+    branch:
+      - '/(enhancement|improve)[/-].+/'
+
+  - label: nextjs
+    files:
+      - 'public/**/*'
+      - 'src/**/*'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'next*'
+      - 'tsconfig.json'
+      - '.eslintrc.json'
+  - label: wasm
+    files:
+      - 'wasm/**/*'
+  - label: docker
+    files:
+      - 'docker/**/*'
+      - 'Dockerfile'
+      - '.dockerignore'
+  - label: github
+    files:
+      - '.github/**/*'
