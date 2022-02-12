@@ -584,7 +584,7 @@ const Page: NextPage = () => {
               `}
               label='ProgramFiles'
               labelId='program-files-label'
-              defaultValue={
+              value={
                 activeRecordedFileId !== undefined ? activeRecordedFileId : ''
               }
               onChange={ev => {
@@ -593,6 +593,7 @@ const Page: NextPage = () => {
                   typeof ev.target.value === 'number'
                 ) {
                   setActiveRecordedFileId(ev.target.value)
+                  setPlayMode('file')
                 }
               }}
             >
@@ -638,7 +639,7 @@ const Page: NextPage = () => {
               `}
               label='再生モード'
               labelId='playmode-label'
-              defaultValue={playMode}
+              value={playMode}
               onChange={ev => {
                 if (
                   ev.target.value !== null &&
