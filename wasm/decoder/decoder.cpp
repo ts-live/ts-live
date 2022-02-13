@@ -298,13 +298,16 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       frame->time_base.den = videoStream->time_base.den;
       frame->time_base.num = videoStream->time_base.num;
 
+      AVFrame *refFrame = av_frame_alloc();
+      av_frame_ref(refFrame, frame);
       {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         videoFrameFound = true;
-        videoFrameQueue.push_back(av_frame_clone(frame));
+
+        videoFrameQueue.push_back(refFrame);
       }
     }
-    av_packet_unref(ppacket);
+    av_packet_free(&ppacket);
   }
 
   spdlog::debug("closing videoCodecContext");
@@ -377,12 +380,14 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
         initPts = frame->pts;
       }
       frame->time_base = audioStreamList[0]->time_base;
+      AVFrame *refFrame = av_frame_alloc();
+      av_frame_ref(refFrame, frame);
       if (videoFrameFound) {
         std::lock_guard<std::mutex> lock(audioFrameMtx);
-        audioFrameQueue.push_back(av_frame_clone(frame));
+        audioFrameQueue.push_back(refFrame);
       }
     }
-    av_packet_unref(ppacket);
+    av_packet_free(&ppacket);
   }
   spdlog::debug("closing audioCodecContext");
   avcodec_close(audioCodecContext);
@@ -521,16 +526,24 @@ void decoderThreadFunc() {
       continue;
     }
     if (packet.stream_index == videoStream->index) {
-      std::lock_guard<std::mutex> lock(videoPacketMtx);
-      videoPacketQueue.push_back(av_packet_clone(&packet));
-      videoPacketCv.notify_all();
+      AVPacket *refPacket = av_packet_alloc();
+      av_packet_ref(refPacket, &packet);
+      {
+        std::lock_guard<std::mutex> lock(videoPacketMtx);
+        videoPacketQueue.push_back(refPacket);
+        videoPacketCv.notify_all();
+      }
     }
     if (audioStreamList.size() > 0 &&
         (packet.stream_index ==
          audioStreamList[(int)dualMonoMode % audioStreamList.size()]->index)) {
-      std::lock_guard<std::mutex> lock(audioPacketMtx);
-      audioPacketQueue.push_back(av_packet_clone(&packet));
-      audioPacketCv.notify_all();
+      AVPacket *refPacket = av_packet_alloc();
+      av_packet_ref(refPacket, &packet);
+      {
+        std::lock_guard<std::mutex> lock(audioPacketMtx);
+        audioPacketQueue.push_back(refPacket);
+        audioPacketCv.notify_all();
+      }
     }
     if (packet.stream_index == captionStream->index) {
       char buffer[packet.size + 2];
@@ -601,7 +614,6 @@ void initDecoder() {
   servicefilter.SetSuperimposeMode(2);
 }
 
-
 void decoderMainloop() {
   spdlog::debug("decoderMainloop videoFrameQueue:{} audioFrameQueue:{} "
                 "videoPacketQueue:{} audioPacketQueue:{}",
@@ -636,6 +648,7 @@ void decoderMainloop() {
     if (frame->time_base.den == 0 || frame->time_base.num == 0) {
       std::lock_guard<std::mutex> lock(videoFrameMtx);
       videoFrameQueue.pop_front();
+      av_frame_free(&frame);
     } else {
       break;
     }
@@ -645,6 +658,7 @@ void decoderMainloop() {
     if (frame->time_base.den == 0 || frame->time_base.num == 0) {
       std::lock_guard<std::mutex> lock(audioFrameMtx);
       audioFrameQueue.pop_front();
+      av_frame_free(&frame);
     } else {
       break;
     }
