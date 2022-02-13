@@ -89,6 +89,8 @@ const Page: NextPage = () => {
   const videoCanvasRef = useRef<HTMLCanvasElement>(null)
   const captionCanvasRef = useRef<HTMLCanvasElement>(null)
 
+  const [wakeLock, setWakeLock] = useState<WakeLockSentinel>()
+
   const wasmModuleState = useAsync(async () => {
     const adapter = await (navigator as any).gpu.requestAdapter()
     const device = await adapter.requestDevice()
@@ -289,6 +291,11 @@ const Page: NextPage = () => {
     const Module = wasmModuleState.value
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
+
+    // 視聴中のスリープを避ける
+    if (!wakeLock) {
+      navigator.wakeLock.request('screen').then(lock => setWakeLock(lock))
+    }
 
     // ARIB字幕パケットそのものを受け取るコールバック
     // Module.setCaptionCallback(captionData => {
