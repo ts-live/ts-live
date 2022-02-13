@@ -29,6 +29,10 @@ const Caption: React.FC<Props> = ({
 }) => {
   // const canvasRef = useRef<HTMLCanvasElement>(null)
   // const [currentSubtitle, setCurrentSubtitle] = useState<number>()
+  const [renderTimeoutId, setRenderTimeoutId] = useState(
+    setTimeout(() => {}, 0)
+  )
+  const [clearTimeoutId, setClearTimeoutId] = useState(setTimeout(() => {}, 0))
 
   const captionCallback = useCallback(
     (pts: number, ptsTime: number, captionData: Uint8Array) => {
@@ -49,7 +53,7 @@ const Caption: React.FC<Props> = ({
       if (!estimate) return
       // const font = setting.font || SUBTITLE_DEFAULT_FONT
       // const font = `"Rounded M+ 1m for ARIB"`
-      const timer = setTimeout(() => {
+      const renderId = setTimeout(() => {
         const result = provider.render({
           canvas,
           useStroke: true,
@@ -59,13 +63,15 @@ const Caption: React.FC<Props> = ({
           drcsReplacement: true
         })
         if (estimate.endTime === Number.POSITIVE_INFINITY) return
-        setTimeout(() => {
+        const clearId = setTimeout(() => {
           // console.log('end timeout', now, currentSubtitle)
           // if (currentSubtitle !== now) return
           context.clearRect(0, 0, canvas.width, canvas.height)
           // setCurrentSubtitle(undefined)
         }, (estimate.endTime - estimate.startTime) * 1000)
+        setClearTimeoutId(clearId)
       }, estimate.startTime * 1000)
+      setRenderTimeoutId(renderId)
     },
     []
   )
@@ -82,6 +88,8 @@ const Caption: React.FC<Props> = ({
     const context = canvas.getContext('2d')
     if (!context) return
     context.clearRect(0, 0, canvas.width, canvas.height)
+    clearTimeout(renderTimeoutId)
+    clearTimeout(clearTimeoutId)
   }, [service])
 
   return (
