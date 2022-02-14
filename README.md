@@ -6,17 +6,17 @@
 
 ```mermaid
 flowchart LR
-  subgraph tuner[tuner server]
+  subgraph tuner[tunerサーバ]
     Tuner(Tuner) --> mirakurun(mirakurun/mirakc)
   end
   mirakurun -- http://*:40772 -->ffmpeg(Wasm/ffmpeg)
-  subgraph client[client PC]
-    subgraph browser[Browser http://localhost:3000]
+  subgraph client[クライアント PC]
+    subgraph browser[ブラウザ http://localhost:3000]
       ffmpeg --> gpu(WebGPU)
       ffmpeg --> audio(WebAudio)
     end
-    gpu --> monitor(Monitor)
-    audio --> speaker(Speaker/Headphone)
+    gpu --> monitor(モニタ)
+    audio --> speaker(スピーカー ヘッドフォン)
   end
 ```
 
