@@ -27,6 +27,7 @@ import { WasmModule, StatsData } from '../lib/wasmmodule'
 import dayjs from 'dayjs'
 
 import { Program, Service } from 'mirakurun/api'
+import { useRouter } from 'next/router'
 
 const Caption = dynamic(() => import('../components/caption'), { ssr: false })
 
@@ -36,6 +37,11 @@ declare interface EpgRecordedFile {
 }
 
 const Page: NextPage = () => {
+  const router = useRouter()
+  const { debug } = router.query
+
+  const [debugLog, setDebugLog] = useState<boolean>(false)
+
   const [drawer, setDrawer] = useState<boolean>(true)
   const [touched, setTouched] = useState<boolean>(false)
 
@@ -118,6 +124,16 @@ const Page: NextPage = () => {
     if (dualMonoMode === undefined) return
     wasmModuleState.value.setDualMonoMode(dualMonoMode)
   }, [wasmModuleState, dualMonoMode])
+
+  useEffect(() => {
+    if (!wasmModuleState.value) return
+    if (debugLog === undefined) return
+    if (debugLog) {
+      wasmModuleState.value.setLogLevelDebug()
+    } else {
+      wasmModuleState.value.setLogLevelInfo()
+    }
+  }, [wasmModuleState, debugLog])
 
   // const canvasProviderState = useAsync(async () => {
   //   const CanvasProvider = await import('aribb24.js').then(
@@ -479,7 +495,7 @@ const Page: NextPage = () => {
               font-size: 19px;
             `}
           >
-            {'TS-Live!'}
+            {'TS-Live!'} {debug ? 'Debug' : ''}
           </div>
           <div
             css={css`
@@ -550,63 +566,6 @@ const Page: NextPage = () => {
           >
             Active Service: {activeService && activeService.name}
           </div>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            <FormGroup>
-              <TextField
-                label='EPGStation Server'
-                placeholder='http://epgstation:8888'
-                css={css`
-                  width: 100%;
-                `}
-                onChange={ev => {
-                  setEpgStationServer(ev.target.value)
-                }}
-                value={epgStationServer}
-              ></TextField>
-            </FormGroup>
-          </div>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            EPGStation:{' '}
-            {epgStationOk ? `OK (version: ${epgStationVersion})` : 'NG'}
-          </div>
-          <FormControl
-            fullWidth
-            css={css`
-              margin-top: 24px;
-              width: 100%;
-            `}
-          >
-            <InputLabel id='program-files-label'>録画ファイル</InputLabel>
-            <Select
-              css={css`
-                width: 100%;
-              `}
-              label='ProgramFiles'
-              labelId='program-files-label'
-              value={
-                activeRecordedFileId !== undefined ? activeRecordedFileId : ''
-              }
-              onChange={ev => {
-                if (
-                  ev.target.value !== null &&
-                  typeof ev.target.value === 'number'
-                ) {
-                  setActiveRecordedFileId(ev.target.value)
-                  setPlayMode('file')
-                }
-              }}
-            >
-              {getProgramFilesOptions()}
-            </Select>
-          </FormControl>
           <FormControl
             fullWidth
             css={css`
@@ -631,36 +590,6 @@ const Page: NextPage = () => {
               />
               <VolumeUp />
             </Stack>
-          </FormControl>
-          <FormControl
-            fullWidth
-            css={css`
-              margin-top: 24px;
-              width: 100%;
-            `}
-          >
-            <InputLabel id='playmode-label'>再生モード</InputLabel>
-            <Select
-              css={css`
-                width: 100%;
-              `}
-              label='再生モード'
-              labelId='playmode-label'
-              value={playMode}
-              onChange={ev => {
-                if (
-                  ev.target.value !== null &&
-                  typeof ev.target.value === 'string'
-                ) {
-                  setPlayMode(ev.target.value)
-                }
-              }}
-            >
-              <MenuItem value='live'>ライブ視聴</MenuItem>
-              {activeRecordedFileId !== undefined && (
-                <MenuItem value='file'>ファイル再生</MenuItem>
-              )}
-            </Select>
           </FormControl>
           <FormControl
             fullWidth
@@ -705,26 +634,139 @@ const Page: NextPage = () => {
               ></FormControlLabel>
             </FormGroup>
           </div>
-          <div>
-            <FormGroup>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={showCharts}
+          {debug ? (
+            <div>
+              <div
+                css={css`
+                  margin-top: 16px;
+                `}
+              >
+                <FormGroup>
+                  <TextField
+                    label='EPGStation Server'
+                    placeholder='http://epgstation:8888'
+                    css={css`
+                      width: 100%;
+                    `}
                     onChange={ev => {
-                      setShowCharts(ev.target.checked)
-                      if (ev.target.checked) {
-                        wasmModuleState.value?.setStatsCallback(statsCallback)
-                      } else {
-                        wasmModuleState.value?.setStatsCallback(null)
-                      }
+                      setEpgStationServer(ev.target.value)
                     }}
-                  ></Checkbox>
-                }
-                label='統計グラフを表示する'
-              ></FormControlLabel>
-            </FormGroup>
-          </div>
+                    value={epgStationServer}
+                  ></TextField>
+                </FormGroup>
+              </div>
+              <div
+                css={css`
+                  margin-top: 16px;
+                `}
+              >
+                EPGStation:{' '}
+                {epgStationOk ? `OK (version: ${epgStationVersion})` : 'NG'}
+              </div>
+              <FormControl
+                fullWidth
+                css={css`
+                  margin-top: 24px;
+                  width: 100%;
+                `}
+              >
+                <InputLabel id='program-files-label'>録画ファイル</InputLabel>
+                <Select
+                  css={css`
+                    width: 100%;
+                  `}
+                  label='ProgramFiles'
+                  labelId='program-files-label'
+                  value={
+                    activeRecordedFileId !== undefined
+                      ? activeRecordedFileId
+                      : ''
+                  }
+                  onChange={ev => {
+                    if (
+                      ev.target.value !== null &&
+                      typeof ev.target.value === 'number'
+                    ) {
+                      setActiveRecordedFileId(ev.target.value)
+                      setPlayMode('file')
+                    }
+                  }}
+                >
+                  {getProgramFilesOptions()}
+                </Select>
+              </FormControl>
+
+              <FormControl
+                fullWidth
+                css={css`
+                  margin-top: 24px;
+                  width: 100%;
+                `}
+              >
+                <InputLabel id='playmode-label'>再生モード</InputLabel>
+                <Select
+                  css={css`
+                    width: 100%;
+                  `}
+                  label='再生モード'
+                  labelId='playmode-label'
+                  value={playMode}
+                  onChange={ev => {
+                    if (
+                      ev.target.value !== null &&
+                      typeof ev.target.value === 'string'
+                    ) {
+                      setPlayMode(ev.target.value)
+                    }
+                  }}
+                >
+                  <MenuItem value='live'>ライブ視聴</MenuItem>
+                  {activeRecordedFileId !== undefined && (
+                    <MenuItem value='file'>ファイル再生</MenuItem>
+                  )}
+                </Select>
+              </FormControl>
+              <div>
+                <FormGroup>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={showCharts}
+                        onChange={ev => {
+                          setShowCharts(ev.target.checked)
+                          if (ev.target.checked) {
+                            wasmModuleState.value?.setStatsCallback(
+                              statsCallback
+                            )
+                          } else {
+                            wasmModuleState.value?.setStatsCallback(null)
+                          }
+                        }}
+                      ></Checkbox>
+                    }
+                    label='統計グラフを表示する'
+                  ></FormControlLabel>
+                </FormGroup>
+              </div>
+              <div>
+                <FormGroup>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={debugLog}
+                        onChange={ev => {
+                          setDebugLog(ev.target.checked)
+                        }}
+                      ></Checkbox>
+                    }
+                    label='デバッグログを出力する'
+                  ></FormControlLabel>
+                </FormGroup>
+              </div>
+            </div>
+          ) : (
+            <></>
+          )}
         </Box>
       </Drawer>
       <div
