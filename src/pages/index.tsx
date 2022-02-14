@@ -115,6 +115,7 @@ const Page: NextPage = () => {
       console.log('script element created')
     })
     console.log('mod', mod)
+    console.log('PROCESS env:', process.env)
     // mod.setLogLevelDebug()
     return mod
   }, [])
@@ -497,6 +498,7 @@ const Page: NextPage = () => {
           >
             {'TS-Live!'} {debug ? 'Debug' : ''}
           </div>
+          <div>{`version: ${process.env.VERSION}`}</div>
           <div
             css={css`
               margin-top: 28px;
