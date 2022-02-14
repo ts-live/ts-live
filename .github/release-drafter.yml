@@ -67,7 +67,6 @@ autolabeler:
 
   - label: nextjs
     files:
-      - 'public/**/*'
       - 'src/**/*'
       - 'package.json'
       - 'yarn.lock'
