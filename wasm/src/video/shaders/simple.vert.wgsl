@@ -1,3 +1,4 @@
+R"(
 struct VertexOutput {
   [[builtin(position)]] Position : vec4<f32>;
   [[location(0)]] fragUV : vec2<f32>;
@@ -9,6 +10,7 @@ fn main([[builtin(vertex_index)]] VertexIndex : u32) -> VertexOutput {
       vec2<f32>( 1.0,  1.0),
       vec2<f32>( 1.0, -1.0),
       vec2<f32>(-1.0, -1.0),
+
       vec2<f32>( 1.0,  1.0),
       vec2<f32>(-1.0, -1.0),
       vec2<f32>(-1.0,  1.0));
@@ -17,6 +19,7 @@ fn main([[builtin(vertex_index)]] VertexIndex : u32) -> VertexOutput {
       vec2<f32>(1.0, 0.0),
       vec2<f32>(1.0, 1.0),
       vec2<f32>(0.0, 1.0),
+
       vec2<f32>(1.0, 0.0),
       vec2<f32>(0.0, 1.0),
       vec2<f32>(0.0, 0.0));
@@ -26,3 +29,4 @@ fn main([[builtin(vertex_index)]] VertexIndex : u32) -> VertexOutput {
   output.fragUV = uv[VertexIndex];
   return output;
 }
+)"

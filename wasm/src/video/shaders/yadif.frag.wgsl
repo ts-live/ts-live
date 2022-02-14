@@ -1,3 +1,4 @@
+R"(
 [[group(0), binding(0)]] var mySampler : sampler;
 [[group(0), binding(1)]] var outputFrame :  texture_storage_2d<rgba8unorm, write>;
 [[group(0), binding(2)]] var currentY : texture_2d<f32>;
@@ -135,7 +136,6 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: 
         return clamp(avg(c, e), d - diff, d + diff);
       }
     }
-
     // return clamp(spatial_pred, d - diff, d + diff);
   }
 }
@@ -165,3 +165,4 @@ fn main(
   textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), rgba10);
   textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), rgba11);
 }
+)"

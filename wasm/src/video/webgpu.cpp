@@ -36,15 +36,6 @@ struct WebGPUContext {
 
 static WebGPUContext ctx;
 
-static std::string slurp(const char *filename) {
-  std::ifstream in;
-  in.open(filename, std::ifstream::in | std::ifstream::binary);
-  std::stringstream sstr;
-  sstr << in.rdbuf();
-  in.close();
-  return sstr.str();
-}
-
 /**
  * Helper to create a shader from WGSL source.
  *
@@ -186,9 +177,15 @@ static void createTextures(int width, int height) {
 }
 
 static void createPipeline() {
-  std::string vertWgsl = slurp("/shaders/simple.vert.wgsl");
-  std::string fragWgsl = slurp("/shaders/simple.frag.wgsl");
-  std::string yadifWgsl = slurp("/shaders/yadif.frag.wgsl");
+  std::string vertWgsl =
+#include "shaders/simple.vert.wgsl"
+      ;
+  std::string fragWgsl =
+#include "shaders/simple.frag.wgsl"
+      ;
+  std::string yadifWgsl =
+#include "shaders/yadif.frag.wgsl"
+      ;
 
   WGPUShaderModule vertMod = createShader(vertWgsl.c_str());
   WGPUShaderModule fragMod = createShader(fragWgsl.c_str());
