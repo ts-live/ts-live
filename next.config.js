@@ -1,13 +1,16 @@
 /** @type {import('next').NextConfig} */
 module.exports = {
-  target: 'serverless',
-  async rewrites () {
-    return [
-      {
-        source: '/:any*',
-        destination: '/'
-      }
-    ]
+  // target: 'serverless',
+  // async rewrites () {
+  //   return [
+  //     {
+  //       source: '/:any*',
+  //       destination: '/'
+  //     }
+  //   ]
+  // },
+  env: {
+    VERSION: process.env.VERSION
   },
   async headers () {
     return [
