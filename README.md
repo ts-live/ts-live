@@ -16,7 +16,7 @@ flowchart LR
       ffmpeg --> audio(WebAudio)
     end
     gpu --> monitor(モニタ)
-    audio --> speaker(スピーカー ヘッドフォン)
+    audio --> speaker(スピーカー / ヘッドフォン)
   end
 ```
 
