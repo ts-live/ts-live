@@ -49,17 +49,25 @@ void startAudioWorklet() {
       Module['myAudio'] = {ctx: audioContext, node: audioNode, gain: gainNode};
       audioContext.resume();
       audioNode.port.onmessage = e => {Module.setBufferedAudioSamples(e.data)};
-      console.log('latency', Module['myAudio']['ctx'].baseLatency)
+      console.log('latency', Module['myAudio']['ctx'].baseLatency);
+      if (Module.myAudio.gainValue === undefined) {
+        Module.myAudio.gainValue = 1.0;
+      }
+      Module.myAudio.gain.gain.setValueAtTime(Module.myAudio.gainValue,
+                                                Module.myAudio.ctx.currentTime);
     })();
   }, scriptSource.c_str());
   // clang-format on
 }
 
 void setAudioGain(double val) {
+  // clang-format off
   EM_ASM(
       {
-        Module.myAudio.gain.gain.setValueAtTime($0,
+        if (Module.myAudio && Module.myAudio.gain)
+          Module.myAudio.gain.gain.setValueAtTime($0,
                                                 Module.myAudio.ctx.currentTime);
       },
       val);
+  // clang-format on
 }

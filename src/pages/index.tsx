@@ -7,6 +7,7 @@ import { EventHandler, useCallback, useEffect, useRef, useState } from 'react'
 import { useAsync, useKey, useLocalStorage } from 'react-use'
 import {
   Box,
+  Button,
   Checkbox,
   Divider,
   Drawer,
@@ -20,8 +21,7 @@ import {
   Stack,
   TextField
 } from '@mui/material'
-import VolumeDown from '@mui/icons-material/VolumeDown'
-import VolumeUp from '@mui/icons-material/VolumeUp'
+import { VolumeMute, VolumeUp } from '@mui/icons-material'
 import { CartesianGrid, LineChart, XAxis, YAxis, Line, Legend } from 'recharts'
 import Head from 'next/head'
 import { WasmModule, StatsData } from '../lib/wasmmodule'
@@ -75,7 +75,8 @@ const Page: NextPage = () => {
     'tsplayerDualMonoMode',
     0
   )
-  const [volume, setVolume] = useState<number>(1.0)
+  const [volume, setVolume] = useLocalStorage<number>('tsplayerVolume', 1.0)
+  const [mute, setMute] = useLocalStorage<boolean>('tsplayerMute', false)
 
   const [stopFunc, setStopFunc] = useState(() => () => {})
   const [chartData, setChartData] = useState<Array<StatsData>>([
@@ -433,17 +434,11 @@ const Page: NextPage = () => {
     })
   }, [epgRecordedFiles, activeRecordedFileId])
 
-  const volumeChangeHandler = useCallback(
-    (event: React.SyntheticEvent | Event, val: number | Array<number>) => {
-      if (val !== null && typeof val === 'number') {
-        setVolume(val)
-        if (wasmModuleState.value !== undefined) {
-          wasmModuleState.value.setAudioGain(val)
-        }
-      }
-    },
-    [wasmModuleState.value]
-  )
+  useEffect(() => {
+    if (!wasmModuleState.value) return
+    if (volume === undefined) return
+    wasmModuleState.value.setAudioGain(mute ? 0.0 : volume)
+  }, [wasmModuleState, volume, mute])
 
   return (
     <Box
@@ -580,16 +575,29 @@ const Page: NextPage = () => {
                 sx={{ mb: 1 }}
                 alignItems='center'
               >
-                <VolumeDown />
+                <Button
+                  size='small'
+                  variant='outlined'
+                  css={css`
+                    padding: 3px 3px;
+                    min-width: 32px;
+                  `}
+                  onClick={() => setMute(!mute)}
+                >
+                  {mute ? <VolumeMute /> : <VolumeUp />}
+                </Button>
                 <Slider
                   aria-label='Volume'
                   min={0}
                   max={2}
-                  step={0.1}
-                  value={volume}
-                  onChangeCommitted={volumeChangeHandler}
+                  step={0.05}
+                  value={mute ? 0 : volume}
+                  disabled={mute}
+                  valueLabelDisplay='auto'
+                  onChange={(ev, val) => {
+                    if (typeof val === 'number') setVolume(val)
+                  }}
                 />
-                <VolumeUp />
               </Stack>
             </FormControl>
           </FormGroup>
