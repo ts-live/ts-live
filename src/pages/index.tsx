@@ -8,6 +8,7 @@ import { useAsync, useKey, useLocalStorage } from 'react-use'
 import {
   Box,
   Checkbox,
+  Divider,
   Drawer,
   FormControl,
   FormControlLabel,
@@ -499,11 +500,12 @@ const Page: NextPage = () => {
             {'TS-Live!'} {debug ? 'Debug' : ''}
           </div>
           <div>{`version: ${process.env.VERSION}`}</div>
-          <div
+          <Divider
             css={css`
-              margin-top: 28px;
+              margin: 10px 0px;
             `}
-          >
+          ></Divider>
+          <FormGroup>
             <TextField
               label='Mirakurun Server'
               placeholder='http://mirakurun:40772'
@@ -515,84 +517,82 @@ const Page: NextPage = () => {
               }}
               value={mirakurunServer}
             ></TextField>
-          </div>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            Mirakurun:{' '}
-            {mirakurunOk ? `OK (version: ${mirakurunVersion})` : 'NG'}
-          </div>
-          <FormControl
-            fullWidth
-            css={css`
-              margin-top: 24px;
-              width: 100%;
-            `}
-          >
-            <InputLabel id='services-label'>Services</InputLabel>
-            <Select
+            <div
               css={css`
+                margin-top: 16px;
+              `}
+            >
+              {mirakurunOk
+                ? `Mirakurun: OK (version: ${mirakurunVersion})`
+                : 'Mirakurun: NG'}
+            </div>
+          </FormGroup>
+          <FormGroup>
+            <FormControl
+              fullWidth
+              css={css`
+                margin-top: 24px;
                 width: 100%;
               `}
-              label='Services'
-              labelId='services-label'
-              defaultValue={
-                activeService
-                  ? activeService.id
-                  : tvServices.length > 0
-                  ? tvServices[0].id
-                  : null
-              }
-              onChange={ev => {
-                if (
-                  ev.target.value !== null &&
-                  typeof (ev.target.value === 'number')
-                ) {
-                  const id = ev.target.value
-                  const active = tvServices.find(v => v.id === id)
-                  if (active) setActiveService(active)
-                  setTouched(true)
+            >
+              <InputLabel id='services-label'>Services</InputLabel>
+              <Select
+                css={css`
+                  width: 100%;
+                `}
+                label='Services'
+                labelId='services-label'
+                defaultValue={
+                  activeService
+                    ? activeService.id
+                    : tvServices.length > 0
+                    ? tvServices[0].id
+                    : null
                 }
-                setDrawer(false)
-              }}
+                onChange={ev => {
+                  if (
+                    ev.target.value !== null &&
+                    typeof (ev.target.value === 'number')
+                  ) {
+                    const id = ev.target.value
+                    const active = tvServices.find(v => v.id === id)
+                    if (active) setActiveService(active)
+                    setTouched(true)
+                  }
+                  setDrawer(false)
+                }}
+              >
+                {getServicesOptions()}
+              </Select>
+            </FormControl>
+          </FormGroup>
+          <FormGroup>
+            <FormControl
+              fullWidth
+              css={css`
+                margin-top: 24px;
+                width: 100%;
+              `}
             >
-              {getServicesOptions()}
-            </Select>
-          </FormControl>
-          <div
-            css={css`
-              margin-top: 16px;
-            `}
-          >
-            Active Service: {activeService && activeService.name}
-          </div>
-          <FormControl
-            fullWidth
-            css={css`
-              margin-top: 24px;
-              width: 100%;
-            `}
-          >
-            <Stack
-              spacing={2}
-              direction='row'
-              sx={{ mb: 1 }}
-              alignItems='center'
-            >
-              <VolumeDown />
-              <Slider
-                aria-label='Volume'
-                min={0}
-                max={2}
-                step={0.1}
-                value={volume}
-                onChangeCommitted={volumeChangeHandler}
-              />
-              <VolumeUp />
-            </Stack>
-          </FormControl>
+              <Stack
+                spacing={2}
+                direction='row'
+                sx={{ mb: 1 }}
+                alignItems='center'
+              >
+                <VolumeDown />
+                <Slider
+                  aria-label='Volume'
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={volume}
+                  onChangeCommitted={volumeChangeHandler}
+                />
+                <VolumeUp />
+              </Stack>
+            </FormControl>
+          </FormGroup>
           <FormControl
             fullWidth
             css={css`
@@ -621,150 +621,141 @@ const Page: NextPage = () => {
               <MenuItem value={1}>副</MenuItem>
             </Select>
           </FormControl>
-          <div>
-            <FormGroup>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={showCaption}
-                    onChange={ev => {
-                      setShowCaption(ev.target.checked)
-                    }}
-                  ></Checkbox>
-                }
-                label='字幕を表示する'
-              ></FormControlLabel>
-            </FormGroup>
-          </div>
+          <FormGroup>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showCaption}
+                  onChange={ev => {
+                    setShowCaption(ev.target.checked)
+                  }}
+                ></Checkbox>
+              }
+              label='字幕を表示する'
+            ></FormControlLabel>
+          </FormGroup>
           {debug ? (
             <div>
-              <div
+              <Divider
                 css={css`
-                  margin-top: 16px;
+                  margin: 10px 0px;
                 `}
-              >
-                <FormGroup>
-                  <TextField
-                    label='EPGStation Server'
-                    placeholder='http://epgstation:8888'
+              ></Divider>
+              <FormGroup>
+                <TextField
+                  label='EPGStation Server'
+                  placeholder='http://epgstation:8888'
+                  css={css`
+                    width: 100%;
+                  `}
+                  onChange={ev => {
+                    setEpgStationServer(ev.target.value)
+                  }}
+                  value={epgStationServer}
+                ></TextField>
+                <div>
+                  {epgStationOk
+                    ? `EPGStation: OK (version: ${epgStationVersion})`
+                    : 'EPGStation: NG'}
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <FormControl
+                  fullWidth
+                  css={css`
+                    margin-top: 24px;
+                    width: 100%;
+                  `}
+                >
+                  <InputLabel id='program-files-label'>録画ファイル</InputLabel>
+                  <Select
                     css={css`
                       width: 100%;
                     `}
+                    label='ProgramFiles'
+                    labelId='program-files-label'
+                    value={
+                      activeRecordedFileId !== undefined
+                        ? activeRecordedFileId
+                        : ''
+                    }
                     onChange={ev => {
-                      setEpgStationServer(ev.target.value)
+                      if (
+                        ev.target.value !== null &&
+                        typeof ev.target.value === 'number'
+                      ) {
+                        setActiveRecordedFileId(ev.target.value)
+                        setPlayMode('file')
+                      }
                     }}
-                    value={epgStationServer}
-                  ></TextField>
-                </FormGroup>
-              </div>
-              <div
-                css={css`
-                  margin-top: 16px;
-                `}
-              >
-                EPGStation:{' '}
-                {epgStationOk ? `OK (version: ${epgStationVersion})` : 'NG'}
-              </div>
-              <FormControl
-                fullWidth
-                css={css`
-                  margin-top: 24px;
-                  width: 100%;
-                `}
-              >
-                <InputLabel id='program-files-label'>録画ファイル</InputLabel>
-                <Select
+                  >
+                    {getProgramFilesOptions()}
+                  </Select>
+                </FormControl>
+              </FormGroup>
+              <FormGroup>
+                <FormControl
+                  fullWidth
                   css={css`
+                    margin-top: 24px;
                     width: 100%;
                   `}
-                  label='ProgramFiles'
-                  labelId='program-files-label'
-                  value={
-                    activeRecordedFileId !== undefined
-                      ? activeRecordedFileId
-                      : ''
+                >
+                  <InputLabel id='playmode-label'>再生モード</InputLabel>
+                  <Select
+                    css={css`
+                      width: 100%;
+                    `}
+                    label='再生モード'
+                    labelId='playmode-label'
+                    value={playMode}
+                    onChange={ev => {
+                      if (
+                        ev.target.value !== null &&
+                        typeof ev.target.value === 'string'
+                      ) {
+                        setPlayMode(ev.target.value)
+                      }
+                    }}
+                  >
+                    <MenuItem value='live'>ライブ視聴</MenuItem>
+                    {activeRecordedFileId !== undefined && (
+                      <MenuItem value='file'>ファイル再生</MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+              </FormGroup>
+              <FormGroup>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={showCharts}
+                      onChange={ev => {
+                        setShowCharts(ev.target.checked)
+                        if (ev.target.checked) {
+                          wasmModuleState.value?.setStatsCallback(statsCallback)
+                        } else {
+                          wasmModuleState.value?.setStatsCallback(null)
+                        }
+                      }}
+                    ></Checkbox>
                   }
-                  onChange={ev => {
-                    if (
-                      ev.target.value !== null &&
-                      typeof ev.target.value === 'number'
-                    ) {
-                      setActiveRecordedFileId(ev.target.value)
-                      setPlayMode('file')
-                    }
-                  }}
-                >
-                  {getProgramFilesOptions()}
-                </Select>
-              </FormControl>
-
-              <FormControl
-                fullWidth
-                css={css`
-                  margin-top: 24px;
-                  width: 100%;
-                `}
-              >
-                <InputLabel id='playmode-label'>再生モード</InputLabel>
-                <Select
-                  css={css`
-                    width: 100%;
-                  `}
-                  label='再生モード'
-                  labelId='playmode-label'
-                  value={playMode}
-                  onChange={ev => {
-                    if (
-                      ev.target.value !== null &&
-                      typeof ev.target.value === 'string'
-                    ) {
-                      setPlayMode(ev.target.value)
-                    }
-                  }}
-                >
-                  <MenuItem value='live'>ライブ視聴</MenuItem>
-                  {activeRecordedFileId !== undefined && (
-                    <MenuItem value='file'>ファイル再生</MenuItem>
-                  )}
-                </Select>
-              </FormControl>
-              <div>
-                <FormGroup>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={showCharts}
-                        onChange={ev => {
-                          setShowCharts(ev.target.checked)
-                          if (ev.target.checked) {
-                            wasmModuleState.value?.setStatsCallback(
-                              statsCallback
-                            )
-                          } else {
-                            wasmModuleState.value?.setStatsCallback(null)
-                          }
-                        }}
-                      ></Checkbox>
-                    }
-                    label='統計グラフを表示する'
-                  ></FormControlLabel>
-                </FormGroup>
-              </div>
-              <div>
-                <FormGroup>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={debugLog}
-                        onChange={ev => {
-                          setDebugLog(ev.target.checked)
-                        }}
-                      ></Checkbox>
-                    }
-                    label='デバッグログを出力する'
-                  ></FormControlLabel>
-                </FormGroup>
-              </div>
+                  label='統計グラフを表示する'
+                ></FormControlLabel>
+              </FormGroup>
+              <FormGroup>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={debugLog}
+                      onChange={ev => {
+                        setDebugLog(ev.target.checked)
+                      }}
+                    ></Checkbox>
+                  }
+                  label='デバッグログを出力する'
+                ></FormControlLabel>
+              </FormGroup>
             </div>
           ) : (
             <></>
@@ -817,118 +808,122 @@ const Page: NextPage = () => {
           `}
           onClick={() => setDrawer(true)}
         ></div>
-        <div
-          css={css`
-            display: ${showCharts ? 'flex' : 'none'};
-            align-content: flex-start;
-            flex-direction: column;
-            flex-wrap: wrap;
-            position: absolute;
-            left: 0px;
-            top: 0px;
-            width: 100%;
-            height: 100%;
-            padding: 28px 12px;
-            pointer-events: none;
-            z-index: 5;
-          `}
-        >
-          <LineChart
-            width={550}
-            height={250}
-            data={showCharts ? chartData : []}
+        {debug ? (
+          <div
             css={css`
+              display: ${showCharts ? 'flex' : 'none'};
+              align-content: flex-start;
+              flex-direction: column;
+              flex-wrap: wrap;
               position: absolute;
               left: 0px;
               top: 0px;
+              width: 100%;
+              height: 100%;
+              padding: 28px 12px;
+              pointer-events: none;
+              z-index: 5;
             `}
           >
-            <CartesianGrid strokeDasharray={'3 3'} />
-            <XAxis dataKey='time' />
-            <YAxis />
-            <Legend />
-            <Line
-              type='linear'
-              dataKey='VideoFrameQueueSize'
-              name='Video Queue Size'
-              stroke='#8884d8'
-              isAnimationActive={false}
-              dot={false}
-            />
-          </LineChart>
-          <LineChart
-            width={550}
-            height={250}
-            data={showCharts ? chartData : []}
-          >
-            <CartesianGrid strokeDasharray={'3 3'} />
-            <XAxis dataKey='time' />
-            <YAxis />
-            <Legend />
-            <Line
-              type='linear'
-              dataKey='AudioFrameQueueSize'
-              name='Audio Queue Size'
-              stroke='#82ca9d'
-              isAnimationActive={false}
-              dot={false}
-            />
-          </LineChart>
-          <LineChart
-            width={550}
-            height={250}
-            data={showCharts ? chartData : []}
-          >
-            <CartesianGrid strokeDasharray={'3 3'} />
-            <XAxis dataKey='time' />
-            <YAxis />
-            <Legend />
-            <Line
-              type='linear'
-              dataKey='CaptionDataQueueSize'
-              name='Caption Data Size'
-              stroke='#9dca82'
-              isAnimationActive={false}
-              dot={false}
-            />
-          </LineChart>
-          <LineChart
-            width={550}
-            height={250}
-            data={showCharts ? chartData : []}
-          >
-            <CartesianGrid strokeDasharray={'3 3'} />
-            <XAxis dataKey='time' />
-            <YAxis />
-            <Legend />
-            <Line
-              type='linear'
-              dataKey='AudioWorkletBufferSize'
-              name='AudioWorklet Buffer Size'
-              stroke='#9d82ca'
-              isAnimationActive={false}
-              dot={false}
-            />
-          </LineChart>
-          <LineChart
-            width={550}
-            height={250}
-            data={showCharts ? chartData : []}
-          >
-            <CartesianGrid strokeDasharray={'3 3'} />
-            <XAxis dataKey='time' />
-            <YAxis />
-            <Legend />
-            <Line
-              type='linear'
-              dataKey='InputBufferSize'
-              name='Input Buffer Size'
-              stroke='#ca829d'
-              isAnimationActive={false}
-              dot={false}
-            />
-          </LineChart>
-        </div>
+            <LineChart
+              width={550}
+              height={250}
+              data={showCharts ? chartData : []}
+              css={css`
+                position: absolute;
+                left: 0px;
+                top: 0px;
+              `}
+            >
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey='time' />
+              <YAxis />
+              <Legend />
+              <Line
+                type='linear'
+                dataKey='VideoFrameQueueSize'
+                name='Video Queue Size'
+                stroke='#8884d8'
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart
+              width={550}
+              height={250}
+              data={showCharts ? chartData : []}
+            >
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey='time' />
+              <YAxis />
+              <Legend />
+              <Line
+                type='linear'
+                dataKey='AudioFrameQueueSize'
+                name='Audio Queue Size'
+                stroke='#82ca9d'
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart
+              width={550}
+              height={250}
+              data={showCharts ? chartData : []}
+            >
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey='time' />
+              <YAxis />
+              <Legend />
+              <Line
+                type='linear'
+                dataKey='CaptionDataQueueSize'
+                name='Caption Data Size'
+                stroke='#9dca82'
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart
+              width={550}
+              height={250}
+              data={showCharts ? chartData : []}
+            >
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey='time' />
+              <YAxis />
+              <Legend />
+              <Line
+                type='linear'
+                dataKey='AudioWorkletBufferSize'
+                name='AudioWorklet Buffer Size'
+                stroke='#9d82ca'
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart
+              width={550}
+              height={250}
+              data={showCharts ? chartData : []}
+            >
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey='time' />
+              <YAxis />
+              <Legend />
+              <Line
+                type='linear'
+                dataKey='InputBufferSize'
+                name='Input Buffer Size'
+                stroke='#ca829d'
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+          </div>
+        ) : (
+          <></>
+        )}
       </div>
     </Box>
   )
