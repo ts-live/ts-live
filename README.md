@@ -2,6 +2,24 @@
 
 ブラウザで mirakurun の MPEGTS ストリームを直接再生する実験的 Web アプリ
 
+## 構成
+
+```mermaid
+flowchart LR
+  subgraph tuner[tuner server]
+    Tuner(Tuner) --> mirakurun(mirakurun/mirakc)
+  end
+  mirakurun -- http://*:40772 -->ffmpeg(Wasm/ffmpeg)
+  subgraph client[client PC]
+    subgraph browser[Browser http://localhost:3000]
+      ffmpeg --> gpu(WebGPU)
+      ffmpeg --> audio(WebAudio)
+    end
+    gpu --> monitor(Monitor)
+    audio --> speaker(Speaker/Headphone)
+  end
+```
+
 ## ライセンス
 
 MIT-License（内部で利用している ffmpeg は LGPL です。他にも多数のライブラリを使っているので個別に確認してください）
