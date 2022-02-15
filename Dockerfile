@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:16-bullseye-slim AS next-build
+FROM --platform=$BUILDPLATFORM node:16.12.0-bullseye-slim AS next-build
 
 WORKDIR /app
 COPY package.json yarn.lock ./
@@ -10,7 +10,7 @@ COPY ./public ./public
 RUN yarn build
 RUN yarn export
 
-FROM --platform=$BUILDPLATFORM golang:bullseye AS go-build
+FROM --platform=$BUILDPLATFORM golang:1.17.7-bullseye AS go-build
 ARG TARGETOS TARGETARCH
 WORKDIR /app/ofelia
 RUN curl -fsSL https://github.com/mcuadros/ofelia/archive/refs/tags/v0.3.6.tar.gz \
