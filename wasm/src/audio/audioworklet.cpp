@@ -1,7 +1,9 @@
+#include <string>
+
 #include <emscripten/emscripten.h>
 #include <emscripten/val.h>
-#include <fstream>
-#include <sstream>
+
+#include "../util/util.hpp"
 
 int bufferedAudioSamples = 0;
 
@@ -27,15 +29,6 @@ void feedAudioData(float *buffer0, float *buffer1, int samples) {
     }
   }, buffer0, buffer1, samples);
   // clang-format on
-}
-
-static std::string slurp(const char *filename) {
-  std::ifstream in;
-  in.open(filename, std::ifstream::in | std::ifstream::binary);
-  std::stringstream sstr;
-  sstr << in.rdbuf();
-  in.close();
-  return sstr.str();
 }
 
 void startAudioWorklet() {
