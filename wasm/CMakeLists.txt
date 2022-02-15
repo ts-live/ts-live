@@ -79,7 +79,6 @@ ExternalProject_Add(
   # PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-wasm.patch
 )
 
-
 set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavcodec.a
   ${CMAKE_BINARY_DIR}/install/lib/libavformat.a
@@ -87,13 +86,98 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
 )
 
+set(OPENFST_CONFIGURE_COMMAND_LIST
+  autoreconf -i && emconfigure ./configure
+  --prefix=${CMAKE_CURRENT_BINARY_DIR}/install
+  --enable-static
+  --disable-shared
+  --enable-far
+  --enable-ngram-fsts
+  --enable-lookahead-fsts
+  --with-pic
+)
+list(JOIN OPENFST_CONFIGURE_COMMAND_LIST " " OPENFST_CONFIGURE_COMMAND)
+
+ExternalProject_Add(
+  openfst
+  GIT_REPOSITORY https://github.com/alphacep/openfst.git
+  BUILD_IN_SOURCE TRUE
+  CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst-stamp/openfst-done ] || ( ${OPENFST_CONFIGURE_COMMAND} )"
+  BUILD_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst-stamp/openfst-done ] || emmake make -j24"
+  INSTALL_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst-stamp/openfst-done ] || make install && cp ${CMAKE_CURRENT_BINARY_DIR}/install/lib/libfst*.a ${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst/src/lib/"
+  PATCH_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst-stamp/openfst-done ] || patch -N -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/openfst.patch"
+)
+
+# ExternalProject_Add(
+#   openblas
+#   GIT_REPOSITORY https://github.com/xianyi/OpenBLAS.git
+#   GIT_TAG v0.3.19
+#   BUILD_IN_SOURCE TRUE
+#   INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install
+#   # CONFIGURE_COMMAND emcmake cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_BUILD_CFLAGS=-DFORCE_GENERIC=1 -DTARGET=generic ../openblas
+#   # BUILD_COMMAND cmake --build .
+#   BUILD_COMMAND emmake make CC=emcc AR=emar LD=emcc NOFORTRAN=1 FORCE_GENERIC=1 BINARY=32 TARGET=generic NOLAPACK=1 NOSHARED=1 CROSS=1
+#   INSTALL_COMMAND false
+# )
+
+ExternalProject_Add(
+  clapack
+  GIT_REPOSITORY https://gitlab.inria.fr/kaldi.web/clapack-wasm.git
+  GIT_TAG 1.0.0
+  BUILD_IN_SOURCE TRUE
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/clapack-prefix/src/clapack-stamp/clapack-done ]" || bash -c "emmake make \\\"CFLAGS=-s EXPORTED_FUNCTIONS=MAIN__,_MAIN__,_f_exit,_f_init,_sig_die\\\" all"
+  INSTALL_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/clapack-prefix/src/clapack-stamp/clapack-done ]" || bash -c "LIBDIR=${CMAKE_CURRENT_BINARY_DIR}/install/lib make install || pwd ; false"
+  PATCH_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/clapack-prefix/src/clapack-stamp/clapack-done ]" || bash -c "patch -N -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/clapack-wasm.patch && patch -N -p3 < ${CMAKE_CURRENT_SOURCE_DIR}/clapack-wasm-libf2c.patch"
+)
+
+
+set(KALDI_CONFIGURE_COMMAND_LIST
+  emconfigure ./configure
+  --use-cuda=no
+  --static
+  --static-fst=yes
+  --static-math=yes
+  --clapack-root=${CMAKE_CURRENT_BINARY_DIR}/clapack-prefix/src/clapack
+  --fst-root=${CMAKE_CURRENT_BINARY_DIR}/openfst-prefix/src/openfst/src
+)
+list(JOIN KALDI_CONFIGURE_COMMAND_LIST " " KALDI_CONFIGURE_COMMAND)
+
+ExternalProject_Add(
+  kaldi
+  GIT_REPOSITORY https://github.com/ccoreilly/kaldi.git
+  GIT_TAG lookahead-1.8.0
+  BUILD_IN_SOURCE TRUE
+  SOURCE_SUBDIR src
+  CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/kaldi-prefix/src/kaldi-stamp/kaldi-done ]" || bash -c "${KALDI_CONFIGURE_COMMAND}"
+  BUILD_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/kaldi-prefix/src/kaldi-stamp/kaldi-done ]" || bash -c "emmake make"
+  # CONFIGURE_COMMAND emcmake cmake -DCMAKE_BUILD_TYPE=Release ../kaldi
+  # BUILD_COMMAND cmake --build .
+  INSTALL_COMMAND "false"
+  # PATCH_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/kaldi-prefix/src/kaldi-stamp/kaldi-done ]" || bash -c "patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/kaldi.patch"
+)
+
+ExternalProject_Add(
+  vosk
+  GIT_REPOSITORY https://github.com/alphacep/vosk-api.git
+  GIT_TAG v0.3.32
+  BUILD_IN_SOURCE TRUE
+  SOURCE_SUBDIR src
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND emmake make HAVE_OPENBLAS_CLAPACK=0 KALDI_ROOT=${CMAKE_CURRENT_BINARY_DIR}/kaldi-prefix/src/kaldi OPENFST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/install OUTDIR=${CMAKE_CURRENT_BINARY_DIR}/install/lib
+  INSTALL_COMMAND ""
+)
+
+add_dependencies(kaldi clapack openfst)
+add_dependencies(vosk openfst kaldi)
+
 file(GLOB_RECURSE SOURCES src/*.cpp)
 file(GLOB_RECURSE HEADERS src/*/hpp)
 file(GLOB SHADERS src/video/shaders/*.wgsl)
 
 add_executable(ts-live ${SOURCES} ${HEADERS} ${SHADERS} src/audio/processor.js)
 # set_target_properties(ts-live PROPERTIES OUTPUT_NAME ts-live)
-add_dependencies(ts-live ffmpeg)
+add_dependencies(ts-live ffmpeg vosk)
 target_compile_options(ts-live PUBLIC -matomics -mbulk-memory)
 target_compile_features(ts-live PRIVATE cxx_std_20)
 target_include_directories(ts-live PRIVATE ${CMAKE_BINARY_DIR}/install/include ${CMAKE_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg)

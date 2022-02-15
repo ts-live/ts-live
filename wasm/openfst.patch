@@ -1,0 +1,45 @@
+diff --git a/configure.ac b/configure.ac
+index 9ab8824..94ff482 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -149,40 +149,6 @@ AC_ARG_WITH([libfstdir],
+ 
+ AC_SUBST([libfstdir], $with_libfstdir)
+ 
+-# Flags may be changed after configuring, so this is checked again by
+-# weight_test.cc.  The check here is to save time in the common case,
+-# or when someone does not run `make check`.
+-AC_RUN_IFELSE([AC_LANG_PROGRAM([
+-                 #include <cstdio>
+-
+-                 template <typename T>
+-                 bool FloatEqIsReflexive(T m) {
+-                   volatile T x = 1.111;
+-                   x *= m;
+-
+-                   T y = 1.111;
+-                   y *= m;
+-
+-                   return x == y;
+-                 }
+-               ], [
+-                 volatile double test_value = 1.1;
+-                 if (!FloatEqIsReflexive(static_cast<float>(test_value))) {
+-                   printf("float FAIL\n");
+-                   return 1;
+-                 }
+-                 if (!FloatEqIsReflexive(test_value)) {
+-                   printf("double FAIL\n");
+-                   return 1;
+-                 }
+-               ])],
+-              [echo "Float equality is good"],
+-              [AC_MSG_FAILURE(m4_normalize([
+-                   Test float equality failed!
+-                   Compile with -msse -mfpmath=sse if using g++.
+-              ]))],
+-              [echo "Ignoring test for cross-compilation"])
+-
+ AC_CHECK_LIB([dl], dlopen, [DL_LIBS=-ldl])
+ AC_SUBST([DL_LIBS])
+ 
