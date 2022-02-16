@@ -468,8 +468,8 @@ const Page: NextPage = () => {
             };
 
         `}
-      </Script>
-      <Script id='wasm' strategy='lazyOnload' src='/wasm/ts-live.js'></Script> */}
+      </Script> */}
+      <Script id='wasm' strategy='lazyOnload' src='/vosk.js'></Script>
       <Drawer
         anchor='left'
         open={drawer}

@@ -3459,7 +3459,7 @@ utils-merge@1.0.1:
   resolved "https://registry.yarnpkg.com/utils-merge/-/utils-merge-1.0.1.tgz#9f95710f50a267947b2ccc124741c1028427e713"
   integrity sha1-n5VxD1CiZ5R7LMwSR0HBAoQn5xM=
 
-uuid@^8.3.2:
+uuid@8.3.2, uuid@^8.3.2:
   version "8.3.2"
   resolved "https://registry.yarnpkg.com/uuid/-/uuid-8.3.2.tgz#80d5b5ced271bb9af6c445f21a1a04c606cefbe2"
   integrity sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==
@@ -3473,6 +3473,13 @@ vary@^1, vary@~1.1.2:
   version "1.1.2"
   resolved "https://registry.yarnpkg.com/vary/-/vary-1.1.2.tgz#2299f02c6ded30d4a5961b0b9f74524a18f634fc"
   integrity sha1-IpnwLG3tMNSllhsLn3RSShj2NPw=
+
+vosk-browser@^0.0.5:
+  version "0.0.5"
+  resolved "https://registry.yarnpkg.com/vosk-browser/-/vosk-browser-0.0.5.tgz#c1af0a59b1a2aa1cc89f937372bceeb831dc47d9"
+  integrity sha512-72FASs8GOGSfg4Be0b1dNtqKNJO+pQ/GfivwoUghNCVDDsR/xD5uozZecVolLsklfaw3Ra0aYOVNWNWhk0RB8w==
+  dependencies:
+    uuid "8.3.2"
 
 which-boxed-primitive@^1.0.2:
   version "1.0.2"
