@@ -21,6 +21,15 @@ void feedAudioData(float *buffer0, float *buffer1, int samples) {
     if (Module && Module['myAudio'] && Module['myAudio']['node']) {
       const buffer0 = HEAPF32.slice($0>>2, ($0>>2) + $2);
       const buffer1 = HEAPF32.slice($1>>2, ($1>>2) + $2);
+      if (Module.myAudio.recognizer) {
+        if (!Module.myAudio.audioBuffer) Module.myAudio.audioBuffer = new Object();
+        const bufKey = `buf_${buffer0.length}`;
+        if (!Module.myAudio.audioBuffer[bufKey]) {
+           Module.myAudio.audioBuffer[bufKey] = Module.myAudio.ctx.createBuffer(1, buffer0.length, Module.myAudio.ctx.sampleRate);
+        }
+        Module.myAudio.audioBuffer[bufKey].getChannelData(0).set(buffer0);
+        Module.myAudio.recognizer.acceptWaveform(Module.myAudio.audioBuffer[bufKey]);
+      }
       Module['myAudio']['node'].port.postMessage({
         type: 'feed',
         buffer0: buffer0,
@@ -55,6 +64,18 @@ void startAudioWorklet() {
       }
       Module.myAudio.gain.gain.setValueAtTime(Module.myAudio.gainValue,
                                                 Module.myAudio.ctx.currentTime);
+
+      const model = await Vosk.createModel('model.tar.gz');
+      console.log('model load ok', model);
+      const recognizer = new model.KaldiRecognizer(48000);
+      Module.myAudio.recognizer = recognizer;
+      console.log('recognizer create ok', recognizer);
+      recognizer.on("result", (message) => {
+          console.log(`Result: ${message.result.text}`);
+      });
+      // recognizer.on("partialresult", (message) => {
+      //     console.log(`Partial result: ${message.result.partial}`);
+      // });
     })();
   }, scriptSource.c_str());
   // clang-format on
