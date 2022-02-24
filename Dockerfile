@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:16.12.0-bullseye-slim AS next-build
+FROM --platform=$BUILDPLATFORM node:17.6.0-bullseye-slim AS next-build
 
 WORKDIR /app
 COPY package.json yarn.lock ./
