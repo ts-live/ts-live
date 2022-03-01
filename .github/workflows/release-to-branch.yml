@@ -9,10 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-
-      - uses: dfm/force-push-branch-action@v1
         with:
-          target-branch: release
+          ref: release
+
+      - run: git rebase --force ${{ github.ref }}
+      - run: git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       # - uses: everlytic/branch-merge@1.1.2
       #   with:
       #     github_token: ${{ github.token }}
