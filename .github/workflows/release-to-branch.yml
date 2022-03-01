@@ -12,8 +12,8 @@ jobs:
       - run: git describe --abbrev=0 --tags > /tmp/version
 
       - run: git checkout -b release
-      # - run: git tag release-$(cat /tmp/version)
-      - run: git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} release
+      - run: git tag release-$(cat /tmp/version)
+      - run: git push --tags --force https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} release
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # - uses: everlytic/branch-merge@1.1.2
