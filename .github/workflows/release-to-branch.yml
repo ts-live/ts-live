@@ -10,15 +10,22 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - uses: everlytic/branch-merge@1.1.2
+        with:
+          github_token: ${{ github.token }}
+          source_ref: ${{ github.ref }}
+          target_branch: 'master'
+          commit_message_template: '[Automated] Merged {source_ref} into target {target_branch}'
+
       - run: git describe --abbrev=0 --tags > version
 
       - name: push
         uses: github-actions-x/commit@v2.6
         with:
+          files: version
           github-token: ${{ github.token }}
           push-branch: 'release'
-          commit-message: 'publish'
           force-add: 'true'
-          files: version
+          commit-message: '[Automated] add version file'
           name: Auto-release
           email: kounoike.yuusuke+github-autocommit@email.com
