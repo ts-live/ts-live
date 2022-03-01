@@ -19,7 +19,6 @@ jobs:
           push-branch: 'release'
           commit-message: 'publish'
           force-add: 'true'
-          rebase: 'true'
           files: version
           name: Auto-release
           email: kounoike.yuusuke+github-autocommit@email.com
