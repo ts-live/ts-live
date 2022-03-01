@@ -1,9 +1,0 @@
-.next/
-node_modules/
-wasm/build/
-build/
-.github/
-public/data/
-.vscode/
-Dockerfile
-README.md
