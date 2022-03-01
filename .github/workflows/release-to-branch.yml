@@ -9,18 +9,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: olegtarasov/get-tag@v2.1
-        id: tagName
-        with:
-          tagRegex: 'v(?<version>.*)'
 
-      - uses: everlytic/branch-merge@1.1.2
+      - run: npx node scripts/get-version.js > version
+
+      - name: push
+        uses: github-actions-x/commit@v2.6
         with:
-          github_token: ${{ github.token }}
-          source_ref: ${{ github.ref }}
-          target_branch: 'release'
-          commit_message_template: '[Automated] Released from {source_ref}'
-      - uses: cardinalby/git-tag-action@master
-        env:
-          TAG: release-v${{ steps.tagName.outputs.version }}
-          GITHUB_TOKEN: ${{ github.token }}
+          github-token: ${{ github.token }}
+          push-branch: 'release'
+          commit-message: 'publish'
+          force-add: 'true'
+          rebase: 'true'
+          files: version
+          name: Auto-release
+          email: kounoike.yuusuke+github-autocommit@email.com
