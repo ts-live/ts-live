@@ -9,9 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-
-      - uses: Embraser01/update-git-branch-action@v1.0.0
+      - uses: olegtarasov/get-tag@v2.1
+        id: tagName
         with:
-          branch: release
-          force: 1 # To push-force to the branch
-          githubToken: ${{ github.token }} # Github Token
+          tagRegex: 'v(?<version>.*)'
+
+      - uses: everlytic/branch-merge@1.1.2
+        with:
+          github_token: ${{ github.token }}
+          source_ref: ${{ github.ref }}
+          target_branch: 'release'
+          commit_message_template: '[Automated] Released from {source_ref}'
+      - uses: cardinalby/git-tag-action@master
+        env:
+          TAG: release-v${{ steps.tagName.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
