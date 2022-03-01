@@ -48,7 +48,7 @@ const Page: NextPage = () => {
 
   const [mirakurunServer, setMirakurunServer] = useLocalStorage<string>(
     'mirakurunServer',
-    location.hostname !== 'localhost' ? location.origin : undefined
+    ''
   )
   const [mirakurunOk, setMirakurunOk] = useState<boolean>(false)
   const [mirakurunVersion, setMirakurunVersion] = useState<string>('unknown')
