@@ -23,7 +23,7 @@ jobs:
         with:
           ref: release
 
-      - run: git merge ${{ github.ref }}
+      - run: git merge --allow-unrelated-histories ${{ github.ref }}
 
       - run: mv /tmp/version .
 
