@@ -37,7 +37,7 @@ void startAudioWorklet() {
   // clang-format off
   EM_ASM({
     (async function(){
-      const audioContext = new AudioContext();
+      const audioContext = new AudioContext({sampleRate: 48000});
       await audioContext.audioWorklet.addModule(`data:text/javascript,${encodeURI(UTF8ToString($0))}`);
       const audioNode = new AudioWorkletNode(
           audioContext, 'audio-feeder-processor',
