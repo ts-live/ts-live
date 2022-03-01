@@ -23,6 +23,8 @@ jobs:
         with:
           ref: release
 
+      - run: git config --global user.email "kounoike.yuusuke+github-autocommit@gmail.com"
+      - run: git config --global user.name "Auto-Release"
       - run: git merge --allow-unrelated-histories ${{ github.ref }}
 
       - run: mv /tmp/version .
@@ -36,4 +38,4 @@ jobs:
           force-add: 'true'
           commit-message: '[Automated] Merged release and add version file'
           name: Auto-release
-          email: kounoike.yuusuke+github-autocommit@email.com
+          email: kounoike.yuusuke+github-autocommit@gmail.com
