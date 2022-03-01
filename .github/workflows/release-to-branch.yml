@@ -17,6 +17,10 @@ jobs:
           target_branch: 'release'
           commit_message_template: '[Automated] Merged {source_ref} into target {target_branch}'
 
+      - uses: actions/checkout@v2
+        with:
+          ref: release
+
       - run: git describe --abbrev=0 --tags > version
 
       - name: push
