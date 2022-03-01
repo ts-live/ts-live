@@ -628,7 +628,8 @@ void decoderMainloop() {
     data.set("VideoFrameQueueSize", videoFrameQueue.size());
     data.set("AudioFrameQueueSize", audioFrameQueue.size());
     data.set("AudioWorkletBufferSize", bufferedAudioSamples);
-    data.set("InputBufferSize", inputBufferWriteIndex - inputBufferReadIndex);
+    data.set("InputBufferSize",
+             (inputBufferWriteIndex - inputBufferReadIndex) / 1000000.0);
     data.set("CaptionDataQueueSize",
              captionStream ? captionDataQueue.size() : 0);
     statsBuffer.push_back(std::move(data));
