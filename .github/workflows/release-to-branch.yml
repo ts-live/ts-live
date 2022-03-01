@@ -10,32 +10,30 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - uses: dfm/force-push-branch-action@v1
+        with:
+          target-branch: release
       # - uses: everlytic/branch-merge@1.1.2
       #   with:
       #     github_token: ${{ github.token }}
       #     source_ref: ${{ github.ref }}
       #     target_branch: 'release'
       #     commit_message_template: '[Automated] Merged {source_ref} into target {target_branch}'
-
-      - run: git describe --abbrev=0 --tags > /tmp/version
-
-      - uses: actions/checkout@v2
-        with:
-          ref: release
-
-      - run: git config --global user.email "kounoike.yuusuke+github-autocommit@gmail.com"
-      - run: git config --global user.name "Auto-Release"
-      - run: git merge --allow-unrelated-histories ${{ github.ref }}
-
-      - run: mv /tmp/version .
-
-      - name: push
-        uses: github-actions-x/commit@v2.6
-        with:
-          files: version
-          github-token: ${{ github.token }}
-          push-branch: 'release'
-          force-add: 'true'
-          commit-message: '[Automated] Merged release and add version file'
-          name: Auto-release
-          email: kounoike.yuusuke+github-autocommit@gmail.com
+      # - run: git describe --abbrev=0 --tags > /tmp/version
+      # - uses: actions/checkout@v2
+      #   with:
+      #     ref: release
+      # - run: git config --global user.email "kounoike.yuusuke+github-autocommit@gmail.com"
+      # - run: git config --global user.name "Auto-Release"
+      # - run: git merge --allow-unrelated-histories ${{ github.ref }}
+      # - run: mv /tmp/version .
+      # - name: push
+      #   uses: github-actions-x/commit@v2.6
+      #   with:
+      #     files: version
+      #     github-token: ${{ github.token }}
+      #     push-branch: 'release'
+      #     force-add: 'true'
+      #     commit-message: '[Automated] Merged release and add version file'
+      #     name: Auto-release
+      #     email: kounoike.yuusuke+github-autocommit@gmail.com
