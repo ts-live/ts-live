@@ -9,13 +9,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - run: git describe --abbrev=0 --tags > /tmp/version
 
       - uses: actions/checkout@v2
         with:
           ref: release
 
       - run: git rebase --force ${{ github.ref }}
-      - run: git push --force https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} release
+      - run: git tag release-$(cat /tmp/version)
+      - run: git push --tags --force https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }} release
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # - uses: everlytic/branch-merge@1.1.2
