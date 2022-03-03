@@ -8,8 +8,9 @@ MIT-License（内部で利用している ffmpeg は LGPL です。他にも多�
 
 ## 対応ブラウザ
 
-Chrome 98 以降（適宜対応していきます）
-Origin Trial の関係で Edge には対応していません。
+Chrome 99 以降、その時点の最新版（適宜対応していきます）
+Firefox/Safari は WebGPU の関係でまだ使えません。
+Origin Trial の関係で現在は Edge には対応していません（Edge 102 あたりで対応しているかも）。
 
 ## run
 
