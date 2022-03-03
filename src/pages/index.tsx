@@ -4,6 +4,7 @@ import Image from 'next/image'
 import styles from '../styles/Home.module.css'
 import { GitHub } from '@mui/icons-material'
 import Script from 'next/script'
+import Link from 'next/link'
 
 const Home: NextPage = () => {
   return (
@@ -15,20 +16,20 @@ const Home: NextPage = () => {
           content='TS-Live! experimental mirakurun client for browser'
         />
         <link rel='icon' href='/favicon.ico' />
-        <Script
-          src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
-          strategy='afterInteractive'
-        />
-        <Script id='google-analytics' strategy='afterInteractive'>
-          {`
+      </Head>
+      <Script
+        src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
+        strategy='afterInteractive'
+      />
+      <Script id='google-analytics' strategy='afterInteractive'>
+        {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){window.dataLayer.push(arguments);}
             gtag('js', new Date());
 
             gtag('config', 'G-SR7L1XYNV0');
           `}
-        </Script>
-      </Head>
+      </Script>
 
       <main className={styles.main}>
         <h1 className={styles.title}>
@@ -36,15 +37,19 @@ const Home: NextPage = () => {
         </h1>
 
         <div className={styles.grid}>
-          <a href='/live' className={styles.card}>
-            <h2>Live &rarr;</h2>
-            <p>ライブ視聴</p>
-          </a>
+          <Link href='/live'>
+            <a className={styles.card}>
+              <h2>Live &rarr;</h2>
+              <p>ライブ視聴</p>
+            </a>
+          </Link>
 
-          <a href='/file' className={styles.card}>
-            <h2>File &rarr;</h2>
-            <p>ファイル再生</p>
-          </a>
+          <Link href='/file'>
+            <a className={styles.card}>
+              <h2>File &rarr;</h2>
+              <p>ファイル再生</p>
+            </a>
+          </Link>
         </div>
       </main>
 

@@ -15,20 +15,20 @@ const Home: NextPage = () => {
           content='TS-Live! experimental mirakurun client for browser'
         />
         <link rel='icon' href='/favicon.ico' />
-        <Script
-          src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
-          strategy='afterInteractive'
-        />
-        <Script id='google-analytics' strategy='afterInteractive'>
-          {`
+      </Head>
+      <Script
+        src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
+        strategy='afterInteractive'
+      />
+      <Script id='google-analytics' strategy='afterInteractive'>
+        {`
             window.dataLayer = window.dataLayer || [];
             function gtag(){window.dataLayer.push(arguments);}
             gtag('js', new Date());
 
             gtag('config', 'G-SR7L1XYNV0');
           `}
-        </Script>
-      </Head>
+      </Script>
 
       <main className={styles.main}>Comming soon...</main>
 
