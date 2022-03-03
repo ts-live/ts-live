@@ -461,6 +461,19 @@ const Page: NextPage = () => {
           httpEquiv='origin-trial'
           content='Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
         ></meta>
+        <Script
+          src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
+          strategy='afterInteractive'
+        />
+        <Script id='google-analytics' strategy='afterInteractive'>
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){window.dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-SR7L1XYNV0');
+          `}
+        </Script>
       </Head>
       {/* <Script id='setupModule' strategy='lazyOnload'>
         {`
