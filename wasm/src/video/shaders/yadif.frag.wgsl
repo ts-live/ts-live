@@ -1,15 +1,15 @@
 R"(
-[[group(0), binding(0)]] var mySampler : sampler;
-[[group(0), binding(1)]] var outputFrame :  texture_storage_2d<rgba8unorm, write>;
-[[group(0), binding(2)]] var currentY : texture_2d<f32>;
-[[group(0), binding(3)]] var currentU : texture_2d<f32>;
-[[group(0), binding(4)]] var currentV : texture_2d<f32>;
-[[group(0), binding(5)]] var prevY : texture_2d<f32>;
-[[group(0), binding(6)]] var prevU : texture_2d<f32>;
-[[group(0), binding(7)]] var prevV : texture_2d<f32>;
-[[group(0), binding(8)]] var nextY : texture_2d<f32>;
-[[group(0), binding(9)]] var nextU : texture_2d<f32>;
-[[group(0), binding(10)]] var nextV : texture_2d<f32>;
+@group(0) @binding(0) var mySampler : sampler;
+@group(0) @binding(1) var outputFrame :  texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var currentY : texture_2d<f32>;
+@group(0) @binding(3) var currentU : texture_2d<f32>;
+@group(0) @binding(4) var currentV : texture_2d<f32>;
+@group(0) @binding(5) var prevY : texture_2d<f32>;
+@group(0) @binding(6) var prevU : texture_2d<f32>;
+@group(0) @binding(7) var prevV : texture_2d<f32>;
+@group(0) @binding(8) var nextY : texture_2d<f32>;
+@group(0) @binding(9) var nextU : texture_2d<f32>;
+@group(0) @binding(10) var nextV : texture_2d<f32>;
 
 fn to_coord(tex: texture_2d<f32>, fragUV: vec2<f32>) -> vec2<i32> {
   var dim = textureDimensions(tex);
@@ -144,9 +144,10 @@ fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
   return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
 }
 
-[[stage(compute), workgroup_size(16, 4, 1)]]
+@stage(compute)
+@workgroup_size(16, 4, 1)
 fn main(
-  [[builtin(global_invocation_id)]] coord3: vec3<u32>
+  @builtin(global_invocation_id) coord3: vec3<u32>
 ) {
   var col = i32(coord3[0]);
   var row = i32(coord3[1]);
