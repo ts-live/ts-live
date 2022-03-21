@@ -16,7 +16,7 @@
     "@emotion/react": "^11.8.1",
     "@emotion/styled": "^11.8.1",
     "@mui/icons-material": "^5.4.4",
-    "@mui/material": "^5.4.4",
+    "@mui/material": "^5.5.2",
     "aribb24.js": "^1.8.9",
     "dayjs": "^1.10.8",
     "mirakurun": "^3.9.0-rc.1",
