@@ -18,7 +18,7 @@
     "@mui/icons-material": "^5.5.1",
     "@mui/material": "^5.5.2",
     "aribb24.js": "^1.8.9",
-    "dayjs": "^1.10.8",
+    "dayjs": "^1.11.0",
     "mirakurun": "^3.9.0-rc.1",
     "next": "12.1.0",
     "react": "17.0.2",
