@@ -3517,8 +3517,3 @@ yaml@^1.7.2:
   version "1.10.2"
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-1.10.2.tgz#2301c5ffbf12b467de8da2333a459e29e7920e4b"
   integrity sha512-r3vXyErRCYJ7wg28yvBY5VSoAF8ZvlcW9/BwUzEtUsjvX/DKs24dIkuwjtuprwJJHsbyUbLApepYTR1BN4uHrg==
-
-zlplayer@^0.0.2:
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/zlplayer/-/zlplayer-0.0.2.tgz#2d7959f381e219c3770da54b3444bc5ff89786fb"
-  integrity sha512-nfxKlRh/wzrZxlTWrkzPlE6LEtLogQjK7+oIBwg+qrbi8okX/bk+4/3WRRYnuKGzsYK7V1PkbXHp65/SqS5urA==
