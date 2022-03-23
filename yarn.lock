@@ -720,10 +720,10 @@ aria-query@^4.2.2:
     "@babel/runtime" "^7.10.2"
     "@babel/runtime-corejs3" "^7.10.2"
 
-aribb24.js@^1.8.9:
-  version "1.8.9"
-  resolved "https://registry.yarnpkg.com/aribb24.js/-/aribb24.js-1.8.9.tgz#4125ca0cebdd28ed0ee15e8360a47d982fdb22a2"
-  integrity sha512-q147rwMcve2fK3Y+c4g0+ZWRoLmNAF26siYJqUNbztrI6m8TlckYb42L2MfD8Z8fkSVfrZJ/zMpcoiW+lM6L4w==
+aribb24.js@^1.9.3:
+  version "1.9.3"
+  resolved "https://registry.yarnpkg.com/aribb24.js/-/aribb24.js-1.9.3.tgz#96fcedbc66d984e12f0541331bd8b91caaf38ed4"
+  integrity sha512-jne6JVFy9jZR8rKTgdY0BG6KnhBX/A6Jpqrv9F+bDggO6cdkTo7MMP9FVzOMT9cu2n2Qrk1GBBYi2KWm9jQ3LA==
   dependencies:
     spark-md5 "^3.0.1"
 
