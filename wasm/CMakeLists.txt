@@ -85,6 +85,7 @@ set(FFMPEG_LIBRARIES
   ${CMAKE_BINARY_DIR}/install/lib/libavformat.a
   ${CMAKE_BINARY_DIR}/install/lib/libavutil.a
   ${CMAKE_BINARY_DIR}/install/lib/libavfilter.a
+  ${CMAKE_BINARY_DIR}/install/lib/libswresample.a
 )
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
