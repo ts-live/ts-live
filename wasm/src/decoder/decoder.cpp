@@ -16,10 +16,12 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
+#include <libavutil/channel_layout.h>
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
+#include <libswresample/swresample.h>
 }
 
 // tsreadex
@@ -307,7 +309,7 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
         videoFrameQueue.push_back(refFrame);
       }
     }
-    av_packet_free(&ppacket);
+    av_packet_unref(ppacket);
   }
 
   spdlog::debug("closing videoCodecContext");
@@ -372,10 +374,12 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     }
     while (avcodec_receive_frame(audioCodecContext, frame) == 0) {
       spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
-                    "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{}",
+                    "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{} "
+                    "ch:{} ch_layout:{:016x}",
                     frame->format, frame->pts, av_q2d(frame->time_base),
                     av_q2d(audioStreamList[0]->time_base), frame->buf[0]->size,
-                    frame->buf[1]->size, frame->nb_samples);
+                    frame->buf[1]->size, frame->nb_samples, frame->channels,
+                    frame->channel_layout);
       if (initPts < 0) {
         initPts = frame->pts;
       }
@@ -614,6 +618,10 @@ void initDecoder() {
   servicefilter.SetSuperimposeMode(2);
 }
 
+SwrContext *swr = nullptr;
+int64_t channel_layout = 0;
+int sample_rate = 0;
+
 void decoderMainloop() {
   spdlog::debug("decoderMainloop videoFrameQueue:{} audioFrameQueue:{} "
                 "videoPacketQueue:{} audioPacketQueue:{}",
@@ -729,11 +737,54 @@ void decoderMainloop() {
     spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{}",
                   frame->pts, av_q2d(frame->time_base), frame->nb_samples);
 
-    auto data0 = frame->data[0];
-    auto data1 = frame->data[1];
+    if (frame->channels != 2) {
 
-    feedAudioData(reinterpret_cast<float *>(data0),
-                  reinterpret_cast<float *>(data1), frame->nb_samples);
+      if (!swr || channel_layout != frame->channel_layout ||
+          sample_rate != frame->sample_rate) {
+        spdlog::info("SWR {}: sample_rate:{}->{} layout:{:x}->{:x}",
+                     swr ? "Changed" : "Initialized", sample_rate,
+                     frame->sample_rate, channel_layout, frame->channel_layout);
+        channel_layout = frame->channel_layout;
+        sample_rate = frame->sample_rate;
+        if (swr) {
+          swr_free(&swr);
+        }
+        swr = swr_alloc_set_opts(NULL, // we're allocating a new context
+                                 AV_CH_LAYOUT_STEREO,   // out_ch_layout
+                                 AV_SAMPLE_FMT_FLTP,    // out_sample_fmt
+                                 48000,                 // out_sample_rate
+                                 frame->channel_layout, // in_ch_layout
+                                 AV_SAMPLE_FMT_FLTP,    // in_sample_fmt
+                                 frame->sample_rate,    // in_sample_rate
+                                 0,                     // log_offset
+                                 NULL);                 // log_ctx
+        swr_init(swr);
+      }
+
+      uint8_t *output[2];
+      int out_samples =
+          av_rescale_rnd(swr_get_delay(swr, 48000) + frame->nb_samples, 48000,
+                         48000, AV_ROUND_UP);
+      av_samples_alloc(output, NULL, 2, out_samples, AV_SAMPLE_FMT_FLTP, 0);
+      out_samples =
+          swr_convert(swr, output, out_samples, (const uint8_t **)frame->data,
+                      frame->nb_samples);
+
+      auto data0 = output[0];
+      auto data1 = output[1];
+
+      feedAudioData(reinterpret_cast<float *>(data0),
+                    reinterpret_cast<float *>(data1), frame->nb_samples);
+
+      // av_freep(&input);
+      av_freep(&output[0]);
+    } else {
+      auto data0 = frame->data[0];
+      auto data1 = frame->data[1];
+
+      feedAudioData(reinterpret_cast<float *>(data0),
+                    reinterpret_cast<float *>(data1), frame->nb_samples);
+    }
 
     av_frame_free(&frame);
   }
