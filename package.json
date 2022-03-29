@@ -19,7 +19,7 @@
     "@mui/material": "^5.5.3",
     "aribb24.js": "^1.9.6",
     "dayjs": "^1.11.0",
-    "mirakurun": "^3.9.0-rc.1",
+    "mirakurun": "^3.9.0-rc.2",
     "next": "12.1.0",
     "react": "17.0.2",
     "react-dom": "17.0.2",
