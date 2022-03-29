@@ -175,7 +175,7 @@ void resetInternal() {
     while (!videoPacketQueue.empty()) {
       auto ppacket = videoPacketQueue.front();
       videoPacketQueue.pop_front();
-      av_packet_unref(ppacket);
+      av_packet_free(&ppacket);
     }
   }
   {
@@ -183,7 +183,7 @@ void resetInternal() {
     while (!audioPacketQueue.empty()) {
       auto ppacket = audioPacketQueue.front();
       audioPacketQueue.pop_front();
-      av_packet_unref(ppacket);
+      av_packet_free(&ppacket);
     }
   }
   {
@@ -300,16 +300,15 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       frame->time_base.den = videoStream->time_base.den;
       frame->time_base.num = videoStream->time_base.num;
 
-      AVFrame *refFrame = av_frame_alloc();
-      av_frame_ref(refFrame, frame);
+      AVFrame *cloneFrame = av_frame_clone(frame);
       {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         videoFrameFound = true;
 
-        videoFrameQueue.push_back(refFrame);
+        videoFrameQueue.push_back(cloneFrame);
       }
     }
-    av_packet_unref(ppacket);
+    av_packet_free(&ppacket);
   }
 
   spdlog::debug("closing videoCodecContext");
@@ -384,11 +383,10 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
         initPts = frame->pts;
       }
       frame->time_base = audioStreamList[0]->time_base;
-      AVFrame *refFrame = av_frame_alloc();
-      av_frame_ref(refFrame, frame);
+      AVFrame *cloneFrame = av_frame_clone(frame);
       if (videoFrameFound) {
         std::lock_guard<std::mutex> lock(audioFrameMtx);
-        audioFrameQueue.push_back(refFrame);
+        audioFrameQueue.push_back(cloneFrame);
       }
     }
     av_packet_free(&ppacket);
@@ -521,57 +519,55 @@ void decoderThreadFunc() {
     if (frame == nullptr) {
       frame = av_frame_alloc();
     }
-    AVPacket packet = AVPacket();
+    AVPacket *ppacket = av_packet_alloc();
     int videoCount = 0;
     int audioCount = 0;
-    int ret = av_read_frame(formatContext, &packet);
+    int ret = av_read_frame(formatContext, ppacket);
     if (ret != 0) {
       spdlog::info("av_read_frame: {} {}", ret, av_err2str(ret));
       continue;
     }
-    if (packet.stream_index == videoStream->index) {
-      AVPacket *refPacket = av_packet_alloc();
-      av_packet_ref(refPacket, &packet);
+    if (ppacket->stream_index == videoStream->index) {
+      AVPacket *clonePacket = av_packet_clone(ppacket);
       {
         std::lock_guard<std::mutex> lock(videoPacketMtx);
-        videoPacketQueue.push_back(refPacket);
+        videoPacketQueue.push_back(clonePacket);
         videoPacketCv.notify_all();
       }
     }
     if (audioStreamList.size() > 0 &&
-        (packet.stream_index ==
+        (ppacket->stream_index ==
          audioStreamList[(int)dualMonoMode % audioStreamList.size()]->index)) {
-      AVPacket *refPacket = av_packet_alloc();
-      av_packet_ref(refPacket, &packet);
+      AVPacket *clonePacket = av_packet_clone(ppacket);
       {
         std::lock_guard<std::mutex> lock(audioPacketMtx);
-        audioPacketQueue.push_back(refPacket);
+        audioPacketQueue.push_back(clonePacket);
         audioPacketCv.notify_all();
       }
     }
-    if (packet.stream_index == captionStream->index) {
-      char buffer[packet.size + 2];
-      memcpy(buffer, packet.data, packet.size);
-      buffer[packet.size + 1] = '\0';
-      std::string str = fmt::format("{:02X}", packet.data[0]);
-      for (int i = 1; i < packet.size; i++) {
-        str += fmt::format(" {:02x}", packet.data[i]);
+    if (ppacket->stream_index == captionStream->index) {
+      char buffer[ppacket->size + 2];
+      memcpy(buffer, ppacket->data, ppacket->size);
+      buffer[ppacket->size + 1] = '\0';
+      std::string str = fmt::format("{:02X}", ppacket->data[0]);
+      for (int i = 1; i < ppacket->size; i++) {
+        str += fmt::format(" {:02x}", ppacket->data[i]);
       }
-      spdlog::debug("CaptionPacket received. size: {} data: [{}]", packet.size,
-                    str);
+      spdlog::debug("CaptionPacket received. size: {} data: [{}]",
+                    ppacket->size, str);
       if (!captionCallback.isNull()) {
-        std::vector<uint8_t> buffer(packet.size);
-        memcpy(&buffer[0], packet.data, packet.size);
+        std::vector<uint8_t> buffer(ppacket->size);
+        memcpy(&buffer[0], ppacket->data, ppacket->size);
         {
           std::lock_guard<std::mutex> lock(captionDataMtx);
-          int64_t pts = packet.pts;
+          int64_t pts = ppacket->pts;
           captionDataQueue.push_back(
               std::make_pair<int64_t, std::vector<uint8_t>>(std::move(pts),
                                                             std::move(buffer)));
         }
       }
     }
-    av_packet_unref(&packet);
+    av_packet_free(&ppacket);
   }
 
   spdlog::debug("decoderThreadFunc breaked.");
@@ -619,6 +615,8 @@ void initDecoder() {
 }
 
 SwrContext *swr = nullptr;
+uint8_t *swrOutput[2] = {nullptr, nullptr};
+int swrOutputSize = 0;
 int64_t channel_layout = 0;
 int sample_rate = 0;
 
@@ -734,11 +732,11 @@ void decoderMainloop() {
       frame = audioFrameQueue.front();
       audioFrameQueue.pop_front();
     }
-    spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{}",
-                  frame->pts, av_q2d(frame->time_base), frame->nb_samples);
+    spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{} ch:{}",
+                  frame->pts, av_q2d(frame->time_base), frame->nb_samples,
+                  frame->channels);
 
     if (frame->channels != 2) {
-
       if (!swr || channel_layout != frame->channel_layout ||
           sample_rate != frame->sample_rate) {
         spdlog::info("SWR {}: sample_rate:{}->{} layout:{:x}->{:x}",
@@ -761,29 +759,38 @@ void decoderMainloop() {
         swr_init(swr);
       }
 
-      uint8_t *output[2];
+      int output_linesize;
       int out_samples =
           av_rescale_rnd(swr_get_delay(swr, 48000) + frame->nb_samples, 48000,
                          48000, AV_ROUND_UP);
-      av_samples_alloc(output, NULL, 2, out_samples, AV_SAMPLE_FMT_FLTP, 0);
+      if (swrOutputSize != out_samples) {
+        if (swrOutput[0]) {
+          av_freep(&swrOutput[0]);
+        }
+        int linesize;
+        av_samples_alloc(swrOutput, &linesize, 2, out_samples,
+                         AV_SAMPLE_FMT_FLTP, sizeof(float));
+        spdlog::info("swr output[0]:{:p} output[1]:{:p} out_samples:{}->{} "
+                     "in_samples:{} linesize:{}",
+                     swrOutput[0], swrOutput[1], swrOutputSize, out_samples,
+                     frame->nb_samples, linesize);
+        swrOutputSize = out_samples;
+      }
+
       out_samples =
-          swr_convert(swr, output, out_samples, (const uint8_t **)frame->data,
-                      frame->nb_samples);
+          swr_convert(swr, swrOutput, out_samples,
+                      (const uint8_t **)frame->data, frame->nb_samples);
 
-      auto data0 = output[0];
-      auto data1 = output[1];
-
-      feedAudioData(reinterpret_cast<float *>(data0),
-                    reinterpret_cast<float *>(data1), frame->nb_samples);
-
-      // av_freep(&input);
-      av_freep(&output[0]);
+      feedAudioData(reinterpret_cast<float *>(swrOutput[0]),
+                    reinterpret_cast<float *>(swrOutput[1]), out_samples);
     } else {
-      auto data0 = frame->data[0];
-      auto data1 = frame->data[1];
-
-      feedAudioData(reinterpret_cast<float *>(data0),
-                    reinterpret_cast<float *>(data1), frame->nb_samples);
+      if (swr) {
+        spdlog::info("swr free (now 2ch audio).");
+        swr_free(&swr);
+      }
+      feedAudioData(reinterpret_cast<float *>(frame->data[0]),
+                    reinterpret_cast<float *>(frame->data[1]),
+                    frame->nb_samples);
     }
 
     av_frame_free(&frame);

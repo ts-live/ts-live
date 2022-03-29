@@ -141,7 +141,12 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: 
 }
 
 fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
-  return vec4<f32>(y + 1.5748 * v, y - 0.1873 * u - 0.4681 * v, y + 1.8556 * u, 1.0);
+  var gamma = 2.2 / 2.4;
+  return vec4<f32>(
+    pow(clamp((y + 1.5748 * v - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
+    pow(clamp((y - 0.1873 * u - 0.4681 * v - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
+    pow(clamp((y + 1.8556 * u - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
+    1.0);
 }
 
 @stage(compute)
