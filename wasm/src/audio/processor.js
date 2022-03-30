@@ -21,7 +21,7 @@ class AudioFeederProcessor extends AudioWorkletProcessor {
 
     if (
       this.buffers0.length == 0 ||
-      (!this.started && this.bufferedSamples < 48000 / 2)
+      (!this.started && this.bufferedSamples < 48000 / 10)
     ) {
       output[0].fill(0)
       output[1].fill(0)

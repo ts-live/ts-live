@@ -141,11 +141,10 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: 
 }
 
 fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
-  var gamma = 2.2 / 2.4;
   return vec4<f32>(
-    pow(clamp((y + 1.5748 * v - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
-    pow(clamp((y - 0.1873 * u - 0.4681 * v - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
-    pow(clamp((y + 1.8556 * u - 16.0 / 255.0) * 255.0 / (235.0 - 16.0), 0.0, 1.0), gamma),
+    clamp(y + 1.5748 * v, 0.0, 1.0),
+    clamp(y - 0.1873 * u - 0.4681 * v, 0.0, 1.0),
+    clamp(y + 1.8556 * u, 0.0, 1.0),
     1.0);
 }
 
@@ -156,12 +155,12 @@ fn main(
 ) {
   var col = i32(coord3[0]);
   var row = i32(coord3[1]);
-  var u = yadif(currentU, prevU, nextU, col, row) - 128.0 / 255.0;
-  var v = yadif(currentV, prevV, nextV, col, row) - 128.0 / 255.0;
-  var y00 = yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0) - 16.0 / 255.0;
-  var y01 = yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1) - 16.0 / 255.0;
-  var y10 = yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0) - 16.0 / 255.0;
-  var y11 = yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1) - 16.0 / 255.0;
+  var u = (yadif(currentU, prevU, nextU, col, row) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+  var v = (yadif(currentV, prevV, nextV, col, row) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+  var y00 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+  var y01 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+  var y10 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+  var y11 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
   var rgba00 = yuv2rgba(y00, u, v);
   var rgba01 = yuv2rgba(y01, u, v);
   var rgba10 = yuv2rgba(y10, u, v);
