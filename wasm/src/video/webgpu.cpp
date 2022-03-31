@@ -435,7 +435,7 @@ void drawWebGpu(AVFrame *frame) {
   wgpuComputePassEncoderSetBindGroup(compPass, 0, ctx.yadifBindGroup, 0, 0);
   wgpuComputePassEncoderDispatch(compPass, ctx.textureWidth / 16 / 2,
                                  ctx.textureHeight / 4 / 2, 1);
-  wgpuComputePassEncoderEndPass(compPass);
+  wgpuComputePassEncoderEnd(compPass);
   wgpuComputePassEncoderRelease(compPass);
 
   WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
@@ -444,7 +444,7 @@ void drawWebGpu(AVFrame *frame) {
   wgpuRenderPassEncoderSetBindGroup(pass, 0, ctx.bindGroup, 0, 0);
   wgpuRenderPassEncoderDraw(pass, 6, 1, 0, 0);
 
-  wgpuRenderPassEncoderEndPass(pass);
+  wgpuRenderPassEncoderEnd(pass);
   wgpuRenderPassEncoderRelease(pass); // release pass
 
   // current => prev
