@@ -368,10 +368,10 @@ void drawWebGpu(AVFrame *frame) {
   colorDesc.view = backBufView;
   colorDesc.loadOp = WGPULoadOp_Clear;
   colorDesc.storeOp = WGPUStoreOp_Store;
-  colorDesc.clearColor.r = 0.0f;
-  colorDesc.clearColor.g = 0.0f;
-  colorDesc.clearColor.b = 0.0f;
-  colorDesc.clearColor.a = 1.0f;
+  colorDesc.clearValue.r = 0.0f;
+  colorDesc.clearValue.g = 0.0f;
+  colorDesc.clearValue.b = 0.0f;
+  colorDesc.clearValue.a = 1.0f;
 
   WGPUComputePassDescriptor compPassDesc = {};
 
