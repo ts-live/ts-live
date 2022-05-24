@@ -457,10 +457,6 @@ const Page: NextPage = () => {
           TS-Live!{' '}
           {currentProgram && currentProgram.name && `| ${currentProgram.name}`}
         </title>
-        <meta
-          httpEquiv='origin-trial'
-          content='AjPwILqou86MNqXlfZc0tZycsl9U9sV/uI2ti0RK1/w0kT3/l35O3zugkEb31z1gKbxnakvZahtfWf9h42buSA4AAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjYzNzE4Mzk5fQ=='
-        ></meta>
       </Head>
       <Script
         src='https://www.googletagmanager.com/gtag/js?id=G-SR7L1XYNV0'
