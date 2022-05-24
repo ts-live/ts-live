@@ -32,7 +32,7 @@ module.exports = {
           {
             key: 'origin-trial',
             value:
-              'Amu7sW/oEH3ZqF6SQcPOYVpF9KYNHShFxN1GzM5DY0QW6NwGnbe2kE/YyeQdkSD+kZWhmRnUwQT85zvOA5WYfgAAAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjUyODMxOTk5fQ=='
+              'AjPwILqou86MNqXlfZc0tZycsl9U9sV/uI2ti0RK1/w0kT3/l35O3zugkEb31z1gKbxnakvZahtfWf9h42buSA4AAABJeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjMwMDAiLCJmZWF0dXJlIjoiV2ViR1BVIiwiZXhwaXJ5IjoxNjYzNzE4Mzk5fQ=='
           }
         ]
       }
