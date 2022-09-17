@@ -24,7 +24,7 @@
     "react": "17.0.2",
     "react-dom": "18.0.0",
     "react-use": "^17.4.0",
-    "recharts": "^2.1.9"
+    "recharts": "^2.1.12"
   },
   "devDependencies": {
     "@types/dom-mediacapture-transform": "^0.1.2",
