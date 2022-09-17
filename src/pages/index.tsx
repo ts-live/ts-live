@@ -146,7 +146,7 @@ const Page: NextPage = () => {
   //   )
   //   return CanvasProvider
   // })
-  const statsCallback = useCallback(function statsCallbackFunc (statsDataList) {
+  const statsCallback = useCallback(function statsCallbackFunc (statsDataList: StatsData[]) {
     setChartData(prev => {
       if (prev.length + statsDataList.length > 300) {
         const overLength = prev.length + statsDataList.length - 300
