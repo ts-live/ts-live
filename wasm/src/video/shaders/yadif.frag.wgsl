@@ -148,7 +148,7 @@ fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
     1.0);
 }
 
-@stage(compute)
+@compute
 @workgroup_size(16, 4, 1)
 fn main(
   @builtin(global_invocation_id) coord3: vec3<u32>
