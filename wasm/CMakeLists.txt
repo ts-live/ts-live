@@ -37,12 +37,12 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-x86asm
     --disable-inline-asm
     --nm=emnm
-    --ar=${CMAKE_C_COMPILER_AR}
-    --ranlib=${CMAKE_C_COMPILER_RANLIB}
-    --cc=${CMAKE_C_COMPILER}
-    --cxx=${CMAKE_CXX_COMPILER}
-    --objcc=${CMAKE_C_COMPILER}
-    --dep-cc=${CMAKE_C_COMPILER}
+    --ar=emar
+    --ranlib=emranlib
+    --cc=emcc
+    --cxx=emcc
+    --objcc=emcc
+    --dep-cc=emcc
     --extra-cflags="-msimd128 -matomics -mbulk-memory -funroll-loops"
     --disable-programs
     --disable-doc
@@ -74,7 +74,7 @@ ExternalProject_Add(
   BUILD_IN_SOURCE TRUE
   INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"
-  BUILD_COMMAND ${CMAKE_COMMAND} -E env emmake make SRC_PATH=${SOURCE_DIR} -j24
+  BUILD_COMMAND ${CMAKE_COMMAND} -E env emmake make -j24
   INSTALL_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || make install"
   # PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-wasm.patch
 )
