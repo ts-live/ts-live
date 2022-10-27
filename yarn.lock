@@ -561,10 +561,10 @@
   resolved "https://registry.yarnpkg.com/@types/d3-time/-/d3-time-2.1.1.tgz#743fdc821c81f86537cbfece07093ac39b4bc342"
   integrity sha512-9MVYlmIgmRR31C5b4FVSWtuMmBHh2mOWQYfl7XAYOa8dsnb7iEmUmRSWSFgXFtkjxO65d7hTUHQC+RhR/9IWFg==
 
-"@types/dom-mediacapture-transform@^0.1.2":
-  version "0.1.2"
-  resolved "https://registry.yarnpkg.com/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.2.tgz#5e3be160c1f72bc85ba717a9993c4c36a8fd01d2"
-  integrity sha512-c+GboOblyLBKgFMgGu3rdughD1wUePgHQMeng1pOGOYeDG1iLNRtWUiBi/YxP0WpGmbnU1ICHsV/79JhhALeoA==
+"@types/dom-mediacapture-transform@^0.1.4":
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.4.tgz#f77c1b469f4c33513219dbca46201cf5bf0d082f"
+  integrity sha512-G4DI51gU3zp/nCFVP7O5dv3sZ7nVXy3Dqooup8tDhvdzUNeAMiC0XIFGiwH3UHPh/t6L5odMOHwB3BYlY86WKw==
   dependencies:
     "@types/dom-webcodecs" "*"
 
