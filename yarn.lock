@@ -535,10 +535,10 @@
   dependencies:
     defer-to-connect "^1.0.1"
 
-"@types/dom-mediacapture-transform@^0.1.2":
-  version "0.1.2"
-  resolved "https://registry.yarnpkg.com/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.2.tgz#5e3be160c1f72bc85ba717a9993c4c36a8fd01d2"
-  integrity sha512-c+GboOblyLBKgFMgGu3rdughD1wUePgHQMeng1pOGOYeDG1iLNRtWUiBi/YxP0WpGmbnU1ICHsV/79JhhALeoA==
+"@types/dom-mediacapture-transform@^0.1.5":
+  version "0.1.5"
+  resolved "https://registry.yarnpkg.com/@types/dom-mediacapture-transform/-/dom-mediacapture-transform-0.1.5.tgz#66e0bc919c4c18542644c6658d4e4dc1abd49740"
+  integrity sha512-Mgu6H5LVJPgJuAumx0xFEdZvn9whHy+J3gEJbJz5xdWrUJ8ZwZ/JTvWwYOQPkCGzGWykPN7ufQn94iil+VCWGw==
   dependencies:
     "@types/dom-webcodecs" "*"
 
