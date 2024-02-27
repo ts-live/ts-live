@@ -1,0 +1,5 @@
+paths:
+  - .
+paths-ignore:
+  - wasm/build/ffmpeg-prefix
+  - wasm/build/_deps
