@@ -678,38 +678,41 @@ void decoderMainloop() {
   }
 
   // time_base が 0/0 な不正フレームが入ってたら捨てる
-  while (!videoFrameQueue.empty()) {
+  AVFrame *currentFrame = nullptr;
+  {
     std::lock_guard<std::mutex> lock(videoFrameMtx);
-    AVFrame *frame = videoFrameQueue.front();
-    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      videoFrameQueue.pop_front();
-      av_frame_free(&frame);
-    } else {
-      break;
+    while (!videoFrameQueue.empty()) {
+      AVFrame *frame = videoFrameQueue.front();
+      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+        videoFrameQueue.pop_front();
+        av_frame_free(&frame);
+      } else {
+        currentFrame = frame;
+        break;
+      }
     }
   }
-  while (!audioFrameQueue.empty()) {
+  AVFrame *audioFrame = nullptr;
+  {
     std::lock_guard<std::mutex> lock(audioFrameMtx);
-    AVFrame *frame = audioFrameQueue.front();
-    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      audioFrameQueue.pop_front();
-      av_frame_free(&frame);
-    } else {
-      break;
+    while (!audioFrameQueue.empty()) {
+      AVFrame *frame = audioFrameQueue.front();
+      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+        audioFrameQueue.pop_front();
+        av_frame_free(&frame);
+      } else {
+        audioFrame = frame;
+        break;
+      }
     }
   }
 
-  if (videoFrameQueue.size() > 0 && audioFrameQueue.size() > 0) {
+  if (currentFrame && audioFrame) {
     // std::lock_guard<std::mutex> lock(videoFrameMtx);
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
     // 次のVideoFrameをまずは見る（popはまだしない）
-    AVFrame *currentFrame;
-    {
-      std::lock_guard<std::mutex> lock(videoFrameMtx);
-      currentFrame = videoFrameQueue.front();
-    }
     spdlog::debug(
         "VideoFrame@mainloop pts:{} time_base:{} {}/{} AudioQueueSize:{}",
         currentFrame->pts, av_q2d(currentFrame->time_base),
@@ -724,12 +727,6 @@ void decoderMainloop() {
     // }
 
     // AudioFrameは完全に見るだけ
-    AVFrame *audioFrame;
-    {
-      std::lock_guard<std::mutex> lock(audioFrameMtx);
-      audioFrame = audioFrameQueue.front();
-    }
-
     // VideoとAudioのPTSをクロックから時間に直す
     // TODO: クロック一回転したときの処理
     double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
@@ -757,6 +754,38 @@ void decoderMainloop() {
       drawWebGpu(currentFrame);
 
       av_frame_free(&currentFrame);
+    }
+  }
+
+  if (!captionCallback.isNull() && audioFrame) {
+    while (captionDataQueue.size() > 0) {
+      std::pair<int64_t, std::vector<uint8_t>> p;
+      {
+        std::lock_guard<std::mutex> lock(captionDataMtx);
+        p = std::move(captionDataQueue.front());
+        captionDataQueue.pop_front();
+      }
+      double pts = (double)p.first;
+      std::vector<uint8_t> &buffer = p.second;
+      double ptsTime = pts * av_q2d(captionStream->time_base);
+
+      // AudioFrameは完全に見るだけ
+      // VideoとAudioのPTSをクロックから時間に直す
+      // TODO: クロック一回転したときの処理
+      double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
+
+      // 上記から推定される、現在再生している音声のPTS（時間）
+      // double estimatedAudioPlayTime =
+      //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+      // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
+      int sampleRate = audioStreamList[0]->codecpar->sample_rate;
+      double estimatedAudioPlayTime =
+          sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
+                     : audioPtsTime;
+
+      auto data = emscripten::val(
+          emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
+      captionCallback(pts, ptsTime - estimatedAudioPlayTime, data);
     }
   }
 
@@ -830,43 +859,6 @@ void decoderMainloop() {
     }
 
     av_frame_free(&frame);
-  }
-  if (!captionCallback.isNull() && !audioFrameQueue.empty()) {
-    while (captionDataQueue.size() > 0) {
-      std::pair<int64_t, std::vector<uint8_t>> p;
-      {
-        std::lock_guard<std::mutex> lock(captionDataMtx);
-        p = std::move(captionDataQueue.front());
-        captionDataQueue.pop_front();
-      }
-      double pts = (double)p.first;
-      std::vector<uint8_t> &buffer = p.second;
-      double ptsTime = pts * av_q2d(captionStream->time_base);
-
-      // AudioFrameは完全に見るだけ
-      assert(!audioFrameQueue.empty());
-      AVFrame *audioFrame;
-      {
-        std::lock_guard<std::mutex> lock(audioFrameMtx);
-        audioFrame = audioFrameQueue.front();
-      }
-      // VideoとAudioのPTSをクロックから時間に直す
-      // TODO: クロック一回転したときの処理
-      double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
-
-      // 上記から推定される、現在再生している音声のPTS（時間）
-      // double estimatedAudioPlayTime =
-      //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
-      // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
-      int sampleRate = audioStreamList[0]->codecpar->sample_rate;
-      double estimatedAudioPlayTime =
-          sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
-                     : audioPtsTime;
-
-      auto data = emscripten::val(
-          emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
-      captionCallback(pts, ptsTime - estimatedAudioPlayTime, data);
-    }
   }
 }
 
