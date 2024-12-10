@@ -28,6 +28,7 @@ extern "C" {
 #include <servicefilter.hpp>
 
 CServiceFilter servicefilter;
+int servicefilterRemain = 0;
 
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 const size_t PROBE_SIZE = 1024 * 1024;
@@ -101,7 +102,7 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
   if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER &&
       inputBufferReadIndex > 0) {
     size_t remainSize = inputBufferWriteIndex - inputBufferReadIndex;
-    memcpy(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
+    memmove(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
     inputBufferReadIndex = 0;
     inputBufferWriteIndex = remainSize;
   }
@@ -131,17 +132,42 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
          inputBufferReadIndex < inputBufferWriteIndex) {
     inputBufferReadIndex++;
   }
+
+  // 前回返しきれなかったパケットがあれば消費する
+  int copySize = 0;
+  if (servicefilterRemain) {
+    copySize = bufSize / 188 * 188;
+    if (copySize > servicefilterRemain) {
+      copySize = servicefilterRemain;
+    }
+    const auto &packets = servicefilter.GetPackets();
+    memcpy(buf, packets.data() + packets.size() - servicefilterRemain, copySize);
+    servicefilterRemain -= copySize;
+    if (!servicefilterRemain) {
+      servicefilter.ClearPackets();
+    }
+  }
+
   // servicefilterに1パケット（188バイト）だけ入れたからといって、
   // 出てくるのは1パケットとは限らない。色々追加される可能性がある
-  while (inputBufferReadIndex + 188 < inputBufferWriteIndex &&
-         servicefilter.GetPackets().size() < bufSize - 10 * 188) {
+  while (!servicefilterRemain && inputBufferReadIndex + 188 < inputBufferWriteIndex) {
     servicefilter.AddPacket(&inputBuffer[inputBufferReadIndex]);
     inputBufferReadIndex += 188;
+    const auto &packets = servicefilter.GetPackets();
+    servicefilterRemain = static_cast<int>(packets.size());
+    if (servicefilterRemain) {
+      int addSize = bufSize / 188 * 188 - copySize;
+      if (addSize > servicefilterRemain) {
+        addSize = servicefilterRemain;
+      }
+      memcpy(buf + copySize, packets.data(), addSize);
+      copySize += addSize;
+      servicefilterRemain -= addSize;
+      if (!servicefilterRemain) {
+        servicefilter.ClearPackets();
+      }
+    }
   }
-  auto packets = servicefilter.GetPackets();
-  int copySize = packets.size();
-  memcpy(buf, &packets[0], copySize);
-  servicefilter.ClearPackets();
 
   waitCv.notify_all();
   return copySize;
@@ -169,6 +195,8 @@ void resetInternal() {
     std::lock_guard<std::mutex> lock(inputBufferMtx);
     inputBufferReadIndex = 0;
     inputBufferWriteIndex = 0;
+    servicefilter.ClearPackets();
+    servicefilterRemain = 0;
   }
   {
     std::lock_guard<std::mutex> lock(videoPacketMtx);
