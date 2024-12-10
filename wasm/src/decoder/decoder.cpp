@@ -411,8 +411,8 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
         initPts = frame->pts;
       }
       frame->time_base = audioStreamList[0]->time_base;
-      AVFrame *cloneFrame = av_frame_clone(frame);
       if (videoFrameFound) {
+        AVFrame *cloneFrame = av_frame_clone(frame);
         std::lock_guard<std::mutex> lock(audioFrameMtx);
         audioFrameQueue.push_back(cloneFrame);
       }
