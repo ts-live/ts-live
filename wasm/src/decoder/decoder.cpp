@@ -383,7 +383,7 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(audioPacketMtx);
-      videoPacketCv.wait(
+      audioPacketCv.wait(
           lock, [&] { return !audioPacketQueue.empty() || terminateFlag; });
       if (terminateFlag) {
         break;
