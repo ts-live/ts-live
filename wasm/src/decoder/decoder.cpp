@@ -679,9 +679,9 @@ void decoderMainloop() {
 
   // time_base が 0/0 な不正フレームが入ってたら捨てる
   while (!videoFrameQueue.empty()) {
+    std::lock_guard<std::mutex> lock(videoFrameMtx);
     AVFrame *frame = videoFrameQueue.front();
     if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      std::lock_guard<std::mutex> lock(videoFrameMtx);
       videoFrameQueue.pop_front();
       av_frame_free(&frame);
     } else {
@@ -689,9 +689,9 @@ void decoderMainloop() {
     }
   }
   while (!audioFrameQueue.empty()) {
+    std::lock_guard<std::mutex> lock(audioFrameMtx);
     AVFrame *frame = audioFrameQueue.front();
     if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      std::lock_guard<std::mutex> lock(audioFrameMtx);
       audioFrameQueue.pop_front();
       av_frame_free(&frame);
     } else {
@@ -705,7 +705,11 @@ void decoderMainloop() {
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
     // 次のVideoFrameをまずは見る（popはまだしない）
-    AVFrame *currentFrame = videoFrameQueue.front();
+    AVFrame *currentFrame;
+    {
+      std::lock_guard<std::mutex> lock(videoFrameMtx);
+      currentFrame = videoFrameQueue.front();
+    }
     spdlog::debug(
         "VideoFrame@mainloop pts:{} time_base:{} {}/{} AudioQueueSize:{}",
         currentFrame->pts, av_q2d(currentFrame->time_base),
@@ -720,7 +724,11 @@ void decoderMainloop() {
     // }
 
     // AudioFrameは完全に見るだけ
-    AVFrame *audioFrame = audioFrameQueue.front();
+    AVFrame *audioFrame;
+    {
+      std::lock_guard<std::mutex> lock(audioFrameMtx);
+      audioFrame = audioFrameQueue.front();
+    }
 
     // VideoとAudioのPTSをクロックから時間に直す
     // TODO: クロック一回転したときの処理
@@ -825,18 +833,23 @@ void decoderMainloop() {
   }
   if (!captionCallback.isNull() && !audioFrameQueue.empty()) {
     while (captionDataQueue.size() > 0) {
-      auto p = captionDataQueue.front();
-      double pts = (double)p.first;
-      auto buffer = p.second;
-      double ptsTime = pts * av_q2d(captionStream->time_base);
+      std::pair<int64_t, std::vector<uint8_t>> p;
       {
         std::lock_guard<std::mutex> lock(captionDataMtx);
+        p = std::move(captionDataQueue.front());
         captionDataQueue.pop_front();
       }
+      double pts = (double)p.first;
+      std::vector<uint8_t> &buffer = p.second;
+      double ptsTime = pts * av_q2d(captionStream->time_base);
 
       // AudioFrameは完全に見るだけ
       assert(!audioFrameQueue.empty());
-      AVFrame *audioFrame = audioFrameQueue.front();
+      AVFrame *audioFrame;
+      {
+        std::lock_guard<std::mutex> lock(audioFrameMtx);
+        audioFrame = audioFrameQueue.front();
+      }
       // VideoとAudioのPTSをクロックから時間に直す
       // TODO: クロック一回転したときの処理
       double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
