@@ -141,7 +141,8 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
       copySize = servicefilterRemain;
     }
     const auto &packets = servicefilter.GetPackets();
-    memcpy(buf, packets.data() + packets.size() - servicefilterRemain, copySize);
+    memcpy(buf, packets.data() + packets.size() - servicefilterRemain,
+           copySize);
     servicefilterRemain -= copySize;
     if (!servicefilterRemain) {
       servicefilter.ClearPackets();
@@ -150,7 +151,8 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
 
   // servicefilterに1パケット（188バイト）だけ入れたからといって、
   // 出てくるのは1パケットとは限らない。色々追加される可能性がある
-  while (!servicefilterRemain && inputBufferReadIndex + 188 < inputBufferWriteIndex) {
+  while (!servicefilterRemain &&
+         inputBufferReadIndex + 188 < inputBufferWriteIndex) {
     servicefilter.AddPacket(&inputBuffer[inputBufferReadIndex]);
     inputBufferReadIndex += 188;
     const auto &packets = servicefilter.GetPackets();
