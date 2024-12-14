@@ -710,11 +710,11 @@ void decoderMainloop() {
   }
 
   if (currentFrame && audioFrame) {
-    // std::lock_guard<std::mutex> lock(videoFrameMtx);
+    // 次のVideoFrameをまずは見る（条件を満たせばpopする）
+    // AudioFrameは完全に見るだけ
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
-    // 次のVideoFrameをまずは見る（popはまだしない）
     spdlog::debug(
         "VideoFrame@mainloop pts:{} time_base:{} {}/{} AudioQueueSize:{}",
         currentFrame->pts, av_q2d(currentFrame->time_base),
@@ -728,7 +728,6 @@ void decoderMainloop() {
     //   set_style(videoStream->codecpar->width);
     // }
 
-    // AudioFrameは完全に見るだけ
     // VideoとAudioのPTSをクロックから時間に直す
     // TODO: クロック一回転したときの処理
     double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
