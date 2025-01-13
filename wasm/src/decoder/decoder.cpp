@@ -28,6 +28,7 @@ extern "C" {
 #include <servicefilter.hpp>
 
 CServiceFilter servicefilter;
+int servicefilterRemain = 0;
 
 const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 const size_t PROBE_SIZE = 1024 * 1024;
@@ -101,7 +102,7 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
   if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER &&
       inputBufferReadIndex > 0) {
     size_t remainSize = inputBufferWriteIndex - inputBufferReadIndex;
-    memcpy(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
+    memmove(&inputBuffer[0], &inputBuffer[inputBufferReadIndex], remainSize);
     inputBufferReadIndex = 0;
     inputBufferWriteIndex = remainSize;
   }
@@ -131,17 +132,44 @@ int read_packet(void *opaque, uint8_t *buf, int bufSize) {
          inputBufferReadIndex < inputBufferWriteIndex) {
     inputBufferReadIndex++;
   }
+
+  // 前回返しきれなかったパケットがあれば消費する
+  int copySize = 0;
+  if (servicefilterRemain) {
+    copySize = bufSize / 188 * 188;
+    if (copySize > servicefilterRemain) {
+      copySize = servicefilterRemain;
+    }
+    const auto &packets = servicefilter.GetPackets();
+    memcpy(buf, packets.data() + packets.size() - servicefilterRemain,
+           copySize);
+    servicefilterRemain -= copySize;
+    if (!servicefilterRemain) {
+      servicefilter.ClearPackets();
+    }
+  }
+
   // servicefilterに1パケット（188バイト）だけ入れたからといって、
   // 出てくるのは1パケットとは限らない。色々追加される可能性がある
-  while (inputBufferReadIndex + 188 < inputBufferWriteIndex &&
-         servicefilter.GetPackets().size() < bufSize - 10 * 188) {
+  while (!servicefilterRemain &&
+         inputBufferReadIndex + 188 < inputBufferWriteIndex) {
     servicefilter.AddPacket(&inputBuffer[inputBufferReadIndex]);
     inputBufferReadIndex += 188;
+    const auto &packets = servicefilter.GetPackets();
+    servicefilterRemain = static_cast<int>(packets.size());
+    if (servicefilterRemain) {
+      int addSize = bufSize / 188 * 188 - copySize;
+      if (addSize > servicefilterRemain) {
+        addSize = servicefilterRemain;
+      }
+      memcpy(buf + copySize, packets.data(), addSize);
+      copySize += addSize;
+      servicefilterRemain -= addSize;
+      if (!servicefilterRemain) {
+        servicefilter.ClearPackets();
+      }
+    }
   }
-  auto packets = servicefilter.GetPackets();
-  int copySize = packets.size();
-  memcpy(buf, &packets[0], copySize);
-  servicefilter.ClearPackets();
 
   waitCv.notify_all();
   return copySize;
@@ -169,6 +197,8 @@ void resetInternal() {
     std::lock_guard<std::mutex> lock(inputBufferMtx);
     inputBufferReadIndex = 0;
     inputBufferWriteIndex = 0;
+    servicefilter.ClearPackets();
+    servicefilterRemain = 0;
   }
   {
     std::lock_guard<std::mutex> lock(videoPacketMtx);
@@ -355,7 +385,7 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     AVPacket *ppacket;
     {
       std::unique_lock<std::mutex> lock(audioPacketMtx);
-      videoPacketCv.wait(
+      audioPacketCv.wait(
           lock, [&] { return !audioPacketQueue.empty() || terminateFlag; });
       if (terminateFlag) {
         break;
@@ -383,8 +413,8 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
         initPts = frame->pts;
       }
       frame->time_base = audioStreamList[0]->time_base;
-      AVFrame *cloneFrame = av_frame_clone(frame);
       if (videoFrameFound) {
+        AVFrame *cloneFrame = av_frame_clone(frame);
         std::lock_guard<std::mutex> lock(audioFrameMtx);
         audioFrameQueue.push_back(cloneFrame);
       }
@@ -650,34 +680,41 @@ void decoderMainloop() {
   }
 
   // time_base が 0/0 な不正フレームが入ってたら捨てる
-  while (!videoFrameQueue.empty()) {
-    AVFrame *frame = videoFrameQueue.front();
-    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      std::lock_guard<std::mutex> lock(videoFrameMtx);
-      videoFrameQueue.pop_front();
-      av_frame_free(&frame);
-    } else {
-      break;
+  AVFrame *currentFrame = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(videoFrameMtx);
+    while (!videoFrameQueue.empty()) {
+      AVFrame *frame = videoFrameQueue.front();
+      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+        videoFrameQueue.pop_front();
+        av_frame_free(&frame);
+      } else {
+        currentFrame = frame;
+        break;
+      }
     }
   }
-  while (!audioFrameQueue.empty()) {
-    AVFrame *frame = audioFrameQueue.front();
-    if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-      std::lock_guard<std::mutex> lock(audioFrameMtx);
-      audioFrameQueue.pop_front();
-      av_frame_free(&frame);
-    } else {
-      break;
+  AVFrame *audioFrame = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(audioFrameMtx);
+    while (!audioFrameQueue.empty()) {
+      AVFrame *frame = audioFrameQueue.front();
+      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+        audioFrameQueue.pop_front();
+        av_frame_free(&frame);
+      } else {
+        audioFrame = frame;
+        break;
+      }
     }
   }
 
-  if (videoFrameQueue.size() > 0 && audioFrameQueue.size() > 0) {
-    // std::lock_guard<std::mutex> lock(videoFrameMtx);
+  if (currentFrame && audioFrame) {
+    // 次のVideoFrameをまずは見る（条件を満たせばpopする）
+    // AudioFrameは完全に見るだけ
     // spdlog::info("found Current Frame {}x{} bufferSize:{}",
     // currentFrame->width,
     //              currentFrame->height, bufferSize);
-    // 次のVideoFrameをまずは見る（popはまだしない）
-    AVFrame *currentFrame = videoFrameQueue.front();
     spdlog::debug(
         "VideoFrame@mainloop pts:{} time_base:{} {}/{} AudioQueueSize:{}",
         currentFrame->pts, av_q2d(currentFrame->time_base),
@@ -690,9 +727,6 @@ void decoderMainloop() {
     //     wh != videoStream->codecpar->height) {
     //   set_style(videoStream->codecpar->width);
     // }
-
-    // AudioFrameは完全に見るだけ
-    AVFrame *audioFrame = audioFrameQueue.front();
 
     // VideoとAudioのPTSをクロックから時間に直す
     // TODO: クロック一回転したときの処理
@@ -721,6 +755,38 @@ void decoderMainloop() {
       drawWebGpu(currentFrame);
 
       av_frame_free(&currentFrame);
+    }
+  }
+
+  if (!captionCallback.isNull() && audioFrame) {
+    while (captionDataQueue.size() > 0) {
+      std::pair<int64_t, std::vector<uint8_t>> p;
+      {
+        std::lock_guard<std::mutex> lock(captionDataMtx);
+        p = std::move(captionDataQueue.front());
+        captionDataQueue.pop_front();
+      }
+      double pts = (double)p.first;
+      std::vector<uint8_t> &buffer = p.second;
+      double ptsTime = pts * av_q2d(captionStream->time_base);
+
+      // AudioFrameは完全に見るだけ
+      // VideoとAudioのPTSをクロックから時間に直す
+      // TODO: クロック一回転したときの処理
+      double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
+
+      // 上記から推定される、現在再生している音声のPTS（時間）
+      // double estimatedAudioPlayTime =
+      //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+      // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
+      int sampleRate = audioStreamList[0]->codecpar->sample_rate;
+      double estimatedAudioPlayTime =
+          sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
+                     : audioPtsTime;
+
+      auto data = emscripten::val(
+          emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
+      captionCallback(pts, ptsTime - estimatedAudioPlayTime, data);
     }
   }
 
@@ -794,38 +860,6 @@ void decoderMainloop() {
     }
 
     av_frame_free(&frame);
-  }
-  if (!captionCallback.isNull() && !audioFrameQueue.empty()) {
-    while (captionDataQueue.size() > 0) {
-      auto p = captionDataQueue.front();
-      double pts = (double)p.first;
-      auto buffer = p.second;
-      double ptsTime = pts * av_q2d(captionStream->time_base);
-      {
-        std::lock_guard<std::mutex> lock(captionDataMtx);
-        captionDataQueue.pop_front();
-      }
-
-      // AudioFrameは完全に見るだけ
-      assert(!audioFrameQueue.empty());
-      AVFrame *audioFrame = audioFrameQueue.front();
-      // VideoとAudioのPTSをクロックから時間に直す
-      // TODO: クロック一回転したときの処理
-      double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
-
-      // 上記から推定される、現在再生している音声のPTS（時間）
-      // double estimatedAudioPlayTime =
-      //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
-      // 0除算を避けるためsample_rateがおかしいときはAudioのPTSをそのまま返す
-      int sampleRate = audioStreamList[0]->codecpar->sample_rate;
-      double estimatedAudioPlayTime =
-          sampleRate ? audioPtsTime - (double)bufferedAudioSamples / sampleRate
-                     : audioPtsTime;
-
-      auto data = emscripten::val(
-          emscripten::typed_memory_view<uint8_t>(buffer.size(), &buffer[0]));
-      captionCallback(pts, ptsTime - estimatedAudioPlayTime, data);
-    }
   }
 }
 

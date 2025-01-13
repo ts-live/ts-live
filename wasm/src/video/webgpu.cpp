@@ -434,7 +434,7 @@ void drawWebGpu(AVFrame *frame) {
   wgpuComputePassEncoderSetPipeline(compPass, ctx.yadifPipeline);
   wgpuComputePassEncoderSetBindGroup(compPass, 0, ctx.yadifBindGroup, 0, 0);
   wgpuComputePassEncoderDispatchWorkgroups(compPass, ctx.textureWidth / 16 / 2,
-                                 ctx.textureHeight / 4 / 2, 1);
+                                           ctx.textureHeight / 4 / 2, 1);
   wgpuComputePassEncoderEnd(compPass);
   wgpuComputePassEncoderRelease(compPass);
 
