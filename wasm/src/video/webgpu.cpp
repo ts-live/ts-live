@@ -46,7 +46,7 @@ static WGPUShaderModule createShader(const char *const code,
                                      const char *label = nullptr) {
   WGPUShaderModuleWGSLDescriptor wgsl = {};
   wgsl.chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-  wgsl.source = code;
+  wgsl.code = code;
   WGPUShaderModuleDescriptor desc = {};
   desc.nextInChain = reinterpret_cast<WGPUChainedStruct *>(&wgsl);
   desc.label = label;
@@ -368,6 +368,7 @@ void drawWebGpu(AVFrame *frame) {
   colorDesc.view = backBufView;
   colorDesc.loadOp = WGPULoadOp_Clear;
   colorDesc.storeOp = WGPUStoreOp_Store;
+  colorDesc.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
   colorDesc.clearValue.r = 0.0f;
   colorDesc.clearValue.g = 0.0f;
   colorDesc.clearValue.b = 0.0f;
