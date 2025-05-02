@@ -37,3 +37,5 @@ yarn-error.log*
 *.tsbuildinfo
 build/
 public/data/
+
+.env
