@@ -12,12 +12,17 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf
   mirakc:
-    image: mirakc/mirakc:latest
+    build:
+      context: ./mirakc
+      dockerfile: Dockerfile
     volumes:
-      - ./mirakc-scripts:/scripts
-      - mirakc-data:/var/lib/mirakc
-    entrypoint: ['/scripts/init-mirakc.sh']
+      - mirakc-data:/var/lib/mirakc/epg
+      - ./data:/data
     env_file: .env
+    environment:
+      - TZ=Asia/Tokyo
+      - MIRAKC_DEBUG_CHILD_PROCESS=1
+      - MIRAKC_ARIB_LOG=warn,filter-program=debug
 
 volumes:
   mirakc-data:
