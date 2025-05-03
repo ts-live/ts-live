@@ -4,7 +4,7 @@
 	"name": "C++",
 	"dockerComposeFile": "compose.yml",
 	"service": "devcontainer",
-	"forwardPorts": ["nginx:8000"],
+	"forwardPorts": ["nginx:8000", "mirakc:40772"],
 	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
 	"features": {
 		"ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
