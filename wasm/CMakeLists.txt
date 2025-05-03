@@ -20,8 +20,8 @@ FetchContent_Declare(
 FetchContent_Declare(
   tsreadex
   GIT_REPOSITORY https://github.com/xtne6f/tsreadex.git
-  GIT_TAG d2a2ae460c98bc7e463b60c03edc1c9380208a00
-  PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-cmake.patch && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-copy-audio.patch || true
+  GIT_TAG master-240517
+  # PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-cmake.patch && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-copy-audio.patch || true
 )
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
