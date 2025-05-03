@@ -17,12 +17,18 @@ channels:
     channel: 3
 
 tuners:
-  - name: ダミー
+  - name: ダミー1
     types:
       - GR
     command:
       tsp
+        -a 2/1
         -I file /data/{{{channel}}}.ts
+        -P pcrbitrate --dts
+        -P reduce --target-bitrate 20000000
+        -P pcrbitrate --dts
+        -P pcradjust --ignore-pts --ignore-dts
+        -P filter -n --pid 0x1fff
         -P continuity --fix
         -P sdt --original-network-id 0x00{{{channel}}}
         -P timeref --eit --start system
