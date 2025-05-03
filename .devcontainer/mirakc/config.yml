@@ -22,7 +22,7 @@ tuners:
       - GR
     command:
       tsp
-        -I file --infinite /data/{{{channel}}}.ts
+        -I file /data/{{{channel}}}.ts
         -P continuity --fix
         -P sdt --original-network-id 0x00{{{channel}}}
         -P timeref --eit --start system
