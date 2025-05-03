@@ -70,7 +70,7 @@ include(ExternalProject)
 ExternalProject_Add(
   ffmpeg
   GIT_REPOSITORY https://git.ffmpeg.org/ffmpeg.git
-  GIT_TAG n6.0
+  GIT_TAG n7.0
   BUILD_IN_SOURCE TRUE
   INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"

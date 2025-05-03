@@ -306,8 +306,8 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       spdlog::debug("VideoFrame: {}x{}x{} pixfmt:{} key:{} interlace:{} "
                     "tff:{} codecContext->field_order:{} pts:{} "
                     "stream.timebase:{} bufferSize:{}",
-                    frame->width, frame->height, frame->channels, frame->format,
-                    frame->key_frame, frame->interlaced_frame,
+                    frame->width, frame->height, frame->ch_layout.nb_channels,
+                    frame->format, frame->key_frame, frame->interlaced_frame,
                     frame->top_field_first, videoCodecContext->field_order,
                     frame->pts, av_q2d(videoStream->time_base), bufferSize);
       if (desc == nullptr) {
@@ -404,11 +404,11 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     while (avcodec_receive_frame(audioCodecContext, frame) == 0) {
       spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
                     "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{} "
-                    "ch:{} ch_layout:{:016x}",
+                    "ch:{}",
                     frame->format, frame->pts, av_q2d(frame->time_base),
                     av_q2d(audioStreamList[0]->time_base), frame->buf[0]->size,
-                    frame->buf[1]->size, frame->nb_samples, frame->channels,
-                    frame->channel_layout);
+                    frame->buf[1]->size, frame->nb_samples,
+                    frame->ch_layout.nb_channels);
       if (initPts < 0) {
         initPts = frame->pts;
       }
@@ -521,7 +521,7 @@ void decoderThreadFunc() {
                    "sample_rate:{}",
                    audioStream->index, audioStream->codecpar->codec_id,
                    avcodec_get_name(audioStream->codecpar->codec_id),
-                   audioStream->codecpar->channels,
+                   audioStream->codecpar->ch_layout.nb_channels,
                    audioStream->codecpar->sample_rate);
     }
 
@@ -647,7 +647,7 @@ void initDecoder() {
 SwrContext *swr = nullptr;
 uint8_t *swrOutput[2] = {nullptr, nullptr};
 int swrOutputSize = 0;
-int64_t channel_layout = 0;
+int channel_layout = 0;
 int sample_rate = 0;
 
 void decoderMainloop() {
@@ -800,28 +800,30 @@ void decoderMainloop() {
     }
     spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{} ch:{}",
                   frame->pts, av_q2d(frame->time_base), frame->nb_samples,
-                  frame->channels);
+                  frame->ch_layout.nb_channels);
 
-    if (frame->channels != 2) {
-      if (!swr || channel_layout != frame->channel_layout ||
+    if (frame->ch_layout.nb_channels != 2) {
+      if (!swr || channel_layout != frame->ch_layout.nb_channels ||
           sample_rate != frame->sample_rate) {
-        spdlog::info("SWR {}: sample_rate:{}->{} layout:{:x}->{:x}",
+        spdlog::info("SWR {}: sample_rate:{}->{} layout:{}->{}",
                      swr ? "Changed" : "Initialized", sample_rate,
-                     frame->sample_rate, channel_layout, frame->channel_layout);
-        channel_layout = frame->channel_layout;
+                     frame->sample_rate, channel_layout,
+                     frame->ch_layout.nb_channels);
+        channel_layout = frame->ch_layout.nb_channels;
         sample_rate = frame->sample_rate;
         if (swr) {
           swr_free(&swr);
         }
-        swr = swr_alloc_set_opts(NULL, // we're allocating a new context
-                                 AV_CH_LAYOUT_STEREO,   // out_ch_layout
-                                 AV_SAMPLE_FMT_FLTP,    // out_sample_fmt
-                                 48000,                 // out_sample_rate
-                                 frame->channel_layout, // in_ch_layout
-                                 AV_SAMPLE_FMT_FLTP,    // in_sample_fmt
-                                 frame->sample_rate,    // in_sample_rate
-                                 0,                     // log_offset
-                                 NULL);                 // log_ctx
+        swr_alloc_set_opts2(&swr,              // we're allocating a new context
+                            &frame->ch_layout, // out_ch_layout
+                            AV_SAMPLE_FMT_FLTP, // out_sample_fmt
+                            48000,              // out_sample_rate
+                            &frame->ch_layout,  // in_ch_layout
+                            AV_SAMPLE_FMT_FLTP, // in_sample_fmt
+                            frame->sample_rate, // in_sample_rate
+                            0,                  // log_offset
+                            NULL);              // log_ctx
+
         swr_init(swr);
       }
 
