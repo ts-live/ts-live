@@ -304,12 +304,12 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       int bufferSize = av_image_get_buffer_size((AVPixelFormat)frame->format,
                                                 frame->width, frame->height, 1);
       spdlog::debug("VideoFrame: {}x{}x{} pixfmt:{} key:{} interlace:{} "
-                    "tff:{} codecContext->field_order:{} pts:{} "
+                    "tff:{} codecContext->field_order:?? pts:{} "
                     "stream.timebase:{} bufferSize:{}",
                     frame->width, frame->height, frame->ch_layout.nb_channels,
                     frame->format, frame->key_frame, frame->interlaced_frame,
-                    frame->top_field_first, videoCodecContext->field_order,
-                    frame->pts, av_q2d(videoStream->time_base), bufferSize);
+                    frame->top_field_first, frame->pts,
+                    av_q2d(videoStream->time_base), bufferSize);
       if (desc == nullptr) {
         spdlog::debug("desc is NULL");
       } else {
@@ -472,10 +472,9 @@ void decoderThreadFunc() {
     // find video/audio/caption stream
     for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
       spdlog::debug(
-          "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
+          "stream[{}]: tag:{:x} codecName:{} video_delay:{} "
           "dim:{}x{}",
-          i, formatContext->streams[i]->codecpar->codec_type,
-          formatContext->streams[i]->codecpar->codec_tag,
+          i, formatContext->streams[i]->codecpar->codec_tag,
           avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
           formatContext->streams[i]->codecpar->video_delay,
           formatContext->streams[i]->codecpar->width,
@@ -506,28 +505,26 @@ void decoderThreadFunc() {
       spdlog::error("No audio stream ...");
       return;
     }
-    spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
-                 "colorspace:{}={} colorrange:{}={} delay:{}",
-                 videoStream->index, videoStream->codecpar->codec_id,
+    spdlog::info("Found video stream index:{} codec:{} dim:{}x{} "
+                 "colorspace:{} colorrange:{} delay:{}",
+                 videoStream->index,
                  avcodec_get_name(videoStream->codecpar->codec_id),
                  videoStream->codecpar->width, videoStream->codecpar->height,
-                 videoStream->codecpar->color_space,
                  av_color_space_name(videoStream->codecpar->color_space),
-                 videoStream->codecpar->color_range,
                  av_color_range_name(videoStream->codecpar->color_range),
                  videoStream->codecpar->video_delay);
     for (auto &&audioStream : audioStreamList) {
-      spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
+      spdlog::info("Found audio stream index:{} codecID:{} channels:{} "
                    "sample_rate:{}",
-                   audioStream->index, audioStream->codecpar->codec_id,
+                   audioStream->index,
                    avcodec_get_name(audioStream->codecpar->codec_id),
                    audioStream->codecpar->ch_layout.nb_channels,
                    audioStream->codecpar->sample_rate);
     }
 
     if (captionStream) {
-      spdlog::info("Found caption stream index:{} codecID:{}={}",
-                   captionStream->index, captionStream->codecpar->codec_id,
+      spdlog::info("Found caption stream index:{} codecID:{}",
+                   captionStream->index,
                    avcodec_get_name(captionStream->codecpar->codec_id));
     }
   }
@@ -838,10 +835,9 @@ void decoderMainloop() {
         int linesize;
         av_samples_alloc(swrOutput, &linesize, 2, out_samples,
                          AV_SAMPLE_FMT_FLTP, sizeof(float));
-        spdlog::info("swr output[0]:{:p} output[1]:{:p} out_samples:{}->{} "
+        spdlog::info("swr out_samples:{}->{} "
                      "in_samples:{} linesize:{}",
-                     swrOutput[0], swrOutput[1], swrOutputSize, out_samples,
-                     frame->nb_samples, linesize);
+                     swrOutputSize, out_samples, frame->nb_samples, linesize);
         swrOutputSize = out_samples;
       }
 
