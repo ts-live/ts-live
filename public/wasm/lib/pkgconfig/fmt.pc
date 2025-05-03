@@ -1,0 +1,11 @@
+prefix=/usr/local/emsdk/upstream/emscripten/cache/sysroot
+exec_prefix=/usr/local/emsdk/upstream/emscripten/cache/sysroot
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: fmt
+Description: A modern formatting library
+Version: 11.1.4
+Libs: -L${libdir} -lfmt
+Cflags: -I${includedir}
+
