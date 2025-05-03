@@ -7,10 +7,6 @@ services:
       - ../..:/workspaces:cached
     command: sleep infinity
     env_file: .env
-  nginx:
-    image: nginx:latest
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
   mirakc:
     build:
       context: ./mirakc
