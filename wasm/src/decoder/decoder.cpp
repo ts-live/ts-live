@@ -304,12 +304,12 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       int bufferSize = av_image_get_buffer_size((AVPixelFormat)frame->format,
                                                 frame->width, frame->height, 1);
       spdlog::debug("VideoFrame: {}x{}x{} pixfmt:{} key:{} interlace:{} "
-                    "tff:{} codecContext->field_order:{} pts:{} "
+                    "tff:{} codecContext->field_order:?? pts:{} "
                     "stream.timebase:{} bufferSize:{}",
-                    frame->width, frame->height, frame->channels, frame->format,
-                    frame->key_frame, frame->interlaced_frame,
-                    frame->top_field_first, videoCodecContext->field_order,
-                    frame->pts, av_q2d(videoStream->time_base), bufferSize);
+                    frame->width, frame->height, frame->ch_layout.nb_channels,
+                    frame->format, frame->key_frame, frame->interlaced_frame,
+                    frame->top_field_first, frame->pts,
+                    av_q2d(videoStream->time_base), bufferSize);
       if (desc == nullptr) {
         spdlog::debug("desc is NULL");
       } else {
@@ -404,11 +404,11 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     while (avcodec_receive_frame(audioCodecContext, frame) == 0) {
       spdlog::debug("AudioFrame: format:{} pts:{} frame timebase:{} stream "
                     "timebase:{} buf[0].size:{} buf[1].size:{} nb_samples:{} "
-                    "ch:{} ch_layout:{:016x}",
+                    "ch:{}",
                     frame->format, frame->pts, av_q2d(frame->time_base),
                     av_q2d(audioStreamList[0]->time_base), frame->buf[0]->size,
-                    frame->buf[1]->size, frame->nb_samples, frame->channels,
-                    frame->channel_layout);
+                    frame->buf[1]->size, frame->nb_samples,
+                    frame->ch_layout.nb_channels);
       if (initPts < 0) {
         initPts = frame->pts;
       }
@@ -472,10 +472,9 @@ void decoderThreadFunc() {
     // find video/audio/caption stream
     for (int i = 0; i < (int)formatContext->nb_streams; ++i) {
       spdlog::debug(
-          "stream[{}]: codec_type:{} tag:{:x} codecName:{} video_delay:{} "
+          "stream[{}]: tag:{:x} codecName:{} video_delay:{} "
           "dim:{}x{}",
-          i, formatContext->streams[i]->codecpar->codec_type,
-          formatContext->streams[i]->codecpar->codec_tag,
+          i, formatContext->streams[i]->codecpar->codec_tag,
           avcodec_get_name(formatContext->streams[i]->codecpar->codec_id),
           formatContext->streams[i]->codecpar->video_delay,
           formatContext->streams[i]->codecpar->width,
@@ -506,28 +505,26 @@ void decoderThreadFunc() {
       spdlog::error("No audio stream ...");
       return;
     }
-    spdlog::info("Found video stream index:{} codec:{}={} dim:{}x{} "
-                 "colorspace:{}={} colorrange:{}={} delay:{}",
-                 videoStream->index, videoStream->codecpar->codec_id,
+    spdlog::info("Found video stream index:{} codec:{} dim:{}x{} "
+                 "colorspace:{} colorrange:{} delay:{}",
+                 videoStream->index,
                  avcodec_get_name(videoStream->codecpar->codec_id),
                  videoStream->codecpar->width, videoStream->codecpar->height,
-                 videoStream->codecpar->color_space,
                  av_color_space_name(videoStream->codecpar->color_space),
-                 videoStream->codecpar->color_range,
                  av_color_range_name(videoStream->codecpar->color_range),
                  videoStream->codecpar->video_delay);
     for (auto &&audioStream : audioStreamList) {
-      spdlog::info("Found audio stream index:{} codecID:{}={} channels:{} "
+      spdlog::info("Found audio stream index:{} codecID:{} channels:{} "
                    "sample_rate:{}",
-                   audioStream->index, audioStream->codecpar->codec_id,
+                   audioStream->index,
                    avcodec_get_name(audioStream->codecpar->codec_id),
-                   audioStream->codecpar->channels,
+                   audioStream->codecpar->ch_layout.nb_channels,
                    audioStream->codecpar->sample_rate);
     }
 
     if (captionStream) {
-      spdlog::info("Found caption stream index:{} codecID:{}={}",
-                   captionStream->index, captionStream->codecpar->codec_id,
+      spdlog::info("Found caption stream index:{} codecID:{}",
+                   captionStream->index,
                    avcodec_get_name(captionStream->codecpar->codec_id));
     }
   }
@@ -647,7 +644,7 @@ void initDecoder() {
 SwrContext *swr = nullptr;
 uint8_t *swrOutput[2] = {nullptr, nullptr};
 int swrOutputSize = 0;
-int64_t channel_layout = 0;
+int channel_layout = 0;
 int sample_rate = 0;
 
 void decoderMainloop() {
@@ -800,28 +797,30 @@ void decoderMainloop() {
     }
     spdlog::debug("AudioFrame@mainloop pts:{} time_base:{} nb_samples:{} ch:{}",
                   frame->pts, av_q2d(frame->time_base), frame->nb_samples,
-                  frame->channels);
+                  frame->ch_layout.nb_channels);
 
-    if (frame->channels != 2) {
-      if (!swr || channel_layout != frame->channel_layout ||
+    if (frame->ch_layout.nb_channels != 2) {
+      if (!swr || channel_layout != frame->ch_layout.nb_channels ||
           sample_rate != frame->sample_rate) {
-        spdlog::info("SWR {}: sample_rate:{}->{} layout:{:x}->{:x}",
+        spdlog::info("SWR {}: sample_rate:{}->{} layout:{}->{}",
                      swr ? "Changed" : "Initialized", sample_rate,
-                     frame->sample_rate, channel_layout, frame->channel_layout);
-        channel_layout = frame->channel_layout;
+                     frame->sample_rate, channel_layout,
+                     frame->ch_layout.nb_channels);
+        channel_layout = frame->ch_layout.nb_channels;
         sample_rate = frame->sample_rate;
         if (swr) {
           swr_free(&swr);
         }
-        swr = swr_alloc_set_opts(NULL, // we're allocating a new context
-                                 AV_CH_LAYOUT_STEREO,   // out_ch_layout
-                                 AV_SAMPLE_FMT_FLTP,    // out_sample_fmt
-                                 48000,                 // out_sample_rate
-                                 frame->channel_layout, // in_ch_layout
-                                 AV_SAMPLE_FMT_FLTP,    // in_sample_fmt
-                                 frame->sample_rate,    // in_sample_rate
-                                 0,                     // log_offset
-                                 NULL);                 // log_ctx
+        swr_alloc_set_opts2(&swr,              // we're allocating a new context
+                            &frame->ch_layout, // out_ch_layout
+                            AV_SAMPLE_FMT_FLTP, // out_sample_fmt
+                            48000,              // out_sample_rate
+                            &frame->ch_layout,  // in_ch_layout
+                            AV_SAMPLE_FMT_FLTP, // in_sample_fmt
+                            frame->sample_rate, // in_sample_rate
+                            0,                  // log_offset
+                            NULL);              // log_ctx
+
         swr_init(swr);
       }
 
@@ -836,10 +835,9 @@ void decoderMainloop() {
         int linesize;
         av_samples_alloc(swrOutput, &linesize, 2, out_samples,
                          AV_SAMPLE_FMT_FLTP, sizeof(float));
-        spdlog::info("swr output[0]:{:p} output[1]:{:p} out_samples:{}->{} "
+        spdlog::info("swr out_samples:{}->{} "
                      "in_samples:{} linesize:{}",
-                     swrOutput[0], swrOutput[1], swrOutputSize, out_samples,
-                     frame->nb_samples, linesize);
+                     swrOutputSize, out_samples, frame->nb_samples, linesize);
         swrOutputSize = out_samples;
       }
 

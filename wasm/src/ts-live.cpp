@@ -5,7 +5,6 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/fetch.h>
 #include <emscripten/val.h>
-#include <fmt/format.h>
 #include <mutex>
 #include <spdlog/spdlog.h>
 #include <thread>

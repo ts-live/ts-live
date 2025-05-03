@@ -6,17 +6,18 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/wasm/",
                 "${workspaceFolder}/wasm/build/",
+                "/usr/local/emsdk/upstream/emscripten/system/include/",
                 "${HOME}/ghq/github.com/emscripten-core/emsdk/upstream/emscripten/system/include/"
             ],
             "defines": [
                 "EMSCRIPTEN=1",
                 "__EMSCRIPTEN__=1"
             ],
-            "compilerPath": "/usr/bin/clang-12",
+            "compilerPath": "/usr/bin/clang",
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-clang-x64",
-            "compileCommands": "",
+            "compileCommands": "${workspaceFolder}/wasm/build/compile_commands.json",
             "mergeConfigurations": false,
             "browse": {
                 "limitSymbolsToIncludedHeaders": true

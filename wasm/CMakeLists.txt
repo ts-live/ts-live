@@ -10,18 +10,18 @@ include(FetchContent)
 FetchContent_Declare(
   spdlog
   GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG v1.9.2
+  GIT_TAG v1.15.2
 )
 FetchContent_Declare(
   fmt
   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-  GIT_TAG 8.0.1
+  GIT_TAG 11.1.4
 )
 FetchContent_Declare(
   tsreadex
   GIT_REPOSITORY https://github.com/xtne6f/tsreadex.git
-  GIT_TAG d2a2ae460c98bc7e463b60c03edc1c9380208a00
-  PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-cmake.patch && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-copy-audio.patch || true
+  GIT_TAG master-240517
+  # PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-cmake.patch && patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/tsreadex-copy-audio.patch || true
 )
 set(CMAKE_C_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
 set(CMAKE_CXX_FLAGS "-matomics -mbulk-memory -msimd128 -funroll-loops")
@@ -50,7 +50,7 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-network
     --disable-encoders
     --disable-decoders
-    --enable-decoder=aac
+    --enable-decoder=aac,ac3
     --enable-decoder=mpeg2video
     --disable-hwaccels
     --disable-muxers
@@ -70,7 +70,7 @@ include(ExternalProject)
 ExternalProject_Add(
   ffmpeg
   GIT_REPOSITORY https://git.ffmpeg.org/ffmpeg.git
-  GIT_TAG n5.0
+  GIT_TAG n7.1
   BUILD_IN_SOURCE TRUE
   INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"
@@ -118,13 +118,11 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   target_link_options(ts-live PRIVATE
     "SHELL:-s ASSERTIONS=2"
     "SHELL:-s EXCEPTION_DEBUG=1"
-    "SHELL:-s DEMANGLE_SUPPORT=1"
   )
 else()
   target_link_options(ts-live PRIVATE
   "SHELL:-s ASSERTIONS=0"
   "SHELL:-s EXCEPTION_DEBUG=0"
-  "SHELL:-s DEMANGLE_SUPPORT=0"
   )
 endif()
 
