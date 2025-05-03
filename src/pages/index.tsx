@@ -39,6 +39,8 @@ declare interface EpgRecordedFile {
   filename: string
 }
 
+let initialized = false;
+
 const Page: NextPage = () => {
   const router = useRouter()
   const { debug } = router.query
@@ -89,45 +91,52 @@ const Page: NextPage = () => {
   const captionCanvasRef = useRef<HTMLCanvasElement>(null)
 
   const [wakeLock, setWakeLock] = useState<WakeLockSentinel>()
+  const [wasmMod, setWasmMod] = useState<WasmModule | null>(null)
 
-  const wasmModuleState = useAsync(async () => {
-    const adapter = await (navigator as any).gpu.requestAdapter()
-    const device = await adapter.requestDevice()
-    const mod = await new Promise<WasmModule>(resolve => {
+  useEffect(() => {
+    let mounted = true;
+    console.log("useEffect", initialized)
+    if (initialized) {
+      return
+    }
+    initialized = true;
+    ;(async () => {
+      console.log("async", wasmMod, initialized)
+
+      const adapter = await (navigator as any).gpu.requestAdapter()
+      const device = await adapter.requestDevice()
       const script = document.createElement('script')
       script.onload = () => {
+        console.log("onload")
         ;(window as any)
           .createWasmModule({ preinitializedWebGPUDevice: device })
           .then((m: WasmModule) => {
             console.log('then', m)
-            resolve(m)
+            console.log("setWasmMod")
+            setWasmMod(m)
           })
       }
-      script.src = '/wasm/ts-live.js'
+      script.src = "/wasm/ts-live.js"
       document.head.appendChild(script)
-      console.log('script element created')
-    })
-    console.log('mod', mod)
-    console.log('PROCESS env:', process.env)
-    // mod.setLogLevelDebug()
-    return mod
-  }, [])
+      console.log("script element created")
+    })();
+}, [])
 
   useEffect(() => {
-    if (!wasmModuleState.value) return
+    if (!wasmMod) return
     if (dualMonoMode === undefined) return
-    wasmModuleState.value.setDualMonoMode(dualMonoMode)
-  }, [wasmModuleState, dualMonoMode])
+    wasmMod.setDualMonoMode(dualMonoMode)
+  }, [wasmMod, dualMonoMode])
 
   useEffect(() => {
-    if (!wasmModuleState.value) return
+    if (!wasmMod) return
     if (debugLog === undefined) return
     if (debugLog) {
-      wasmModuleState.value.setLogLevelDebug()
+      wasmMod.setLogLevelDebug()
     } else {
-      wasmModuleState.value.setLogLevelInfo()
+      wasmMod.setLogLevelInfo()
     }
-  }, [wasmModuleState, debugLog])
+  }, [wasmMod, debugLog])
 
   // const canvasProviderState = useAsync(async () => {
   //   const CanvasProvider = await import('aribb24.js').then(
@@ -280,11 +289,11 @@ const Page: NextPage = () => {
       console.log('mirakurunServer or activeService', mirakurunOk, mirakurunServer, activeService)
       return
     }
-    if (wasmModuleState.loading || wasmModuleState.error || !wasmModuleState.value) {
-      console.log('WasmModule not loaded', wasmModuleState.error)
+    if (!wasmMod) {
+      console.log('WasmModule not loaded', wasmMod)
       return
     }
-    const Module = wasmModuleState.value
+    const Module = wasmMod
     // 現在の再生中を止める（or 何もしない）
     stopFunc()
 
@@ -326,16 +335,24 @@ const Page: NextPage = () => {
               console.error('response body is not supplied.')
               return
             }
+            const sleep = (msec: number) => new Promise(resolve => setTimeout(resolve, msec))
             const reader = response.body.getReader()
             let ret = await reader.read()
             while (!ret.done) {
               if (ret.value) {
                 try {
-                  const buffer = Module.getNextInputBuffer(ret.value.length)
-                  buffer.set(ret.value)
-                  // console.debug('calling enqueueData', chunk.length)
-                  Module.commitInputData(ret.value.length)
-                  // console.debug('enqueData done.')
+                  while (true) {
+                    const buffer = Module.getNextInputBuffer(ret.value.length)
+                    if (!buffer) {
+                      await sleep(100)
+                      continue
+                    }
+                    buffer.set(ret.value)
+                    // console.debug('calling enqueueData', chunk.length)
+                    Module.commitInputData(ret.value.length)
+                    // console.debug('enqueData done.')
+                    break
+                  }
                 } catch (ex) {
                   if (typeof ex === 'number') {
                     console.error(Module.getExceptionMsg(ex))
@@ -356,7 +373,7 @@ const Page: NextPage = () => {
         const url = `${epgStationServer}/api/videos/${activeRecordedFileId}`
         Module.playFile(url)
       }
-    }, 200)
+    }, 500)
   }, [
     touched,
     mirakurunOk,
@@ -364,7 +381,7 @@ const Page: NextPage = () => {
     activeService,
     activeRecordedFileId,
     playMode,
-    wasmModuleState,
+    wasmMod,
   ])
 
   useKey(
@@ -412,10 +429,10 @@ const Page: NextPage = () => {
   }, [epgRecordedFiles, activeRecordedFileId])
 
   useEffect(() => {
-    if (!wasmModuleState.value) return
+    if (!wasmMod) return
     if (volume === undefined) return
-    wasmModuleState.value.setAudioGain(mute ? 0.0 : volume)
-  }, [wasmModuleState, volume, mute])
+    wasmMod.setAudioGain(mute ? 0.0 : volume)
+  }, [wasmMod, volume, mute])
 
   return (
     <Box
@@ -689,9 +706,9 @@ const Page: NextPage = () => {
                       onChange={ev => {
                         setShowCharts(ev.target.checked)
                         if (ev.target.checked) {
-                          wasmModuleState.value?.setStatsCallback(statsCallback)
+                          wasmMod?.setStatsCallback(statsCallback)
                         } else {
-                          wasmModuleState.value?.setStatsCallback(null)
+                          wasmMod?.setStatsCallback(null)
                         }
                       }}
                     ></Checkbox>
@@ -749,7 +766,7 @@ const Page: NextPage = () => {
         <div hidden={!showCaption}>
           <Caption
             service={activeService}
-            wasmModule={wasmModuleState.value}
+            wasmModule={wasmMod!}
             canvasRef={captionCanvasRef}
             width={1920}
             height={1080}
