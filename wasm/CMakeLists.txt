@@ -50,7 +50,7 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-network
     --disable-encoders
     --disable-decoders
-    --enable-decoder=aac
+    --enable-decoder=aac,ac3
     --enable-decoder=mpeg2video
     --disable-hwaccels
     --disable-muxers
@@ -70,7 +70,7 @@ include(ExternalProject)
 ExternalProject_Add(
   ffmpeg
   GIT_REPOSITORY https://git.ffmpeg.org/ffmpeg.git
-  GIT_TAG n5.0
+  GIT_TAG n6.0
   BUILD_IN_SOURCE TRUE
   INSTALL_DIR ${CMAKE_CURRENT_BINARY_DIR}/install
   CONFIGURE_COMMAND bash -c "[ -e ${CMAKE_CURRENT_BINARY_DIR}/ffmpeg-prefix/src/ffmpeg-stamp/ffmpeg-done ] || ${FFMPEG_CONFIGURE_COMMAND}"
@@ -118,13 +118,11 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   target_link_options(ts-live PRIVATE
     "SHELL:-s ASSERTIONS=2"
     "SHELL:-s EXCEPTION_DEBUG=1"
-    "SHELL:-s DEMANGLE_SUPPORT=1"
   )
 else()
   target_link_options(ts-live PRIVATE
   "SHELL:-s ASSERTIONS=0"
   "SHELL:-s EXCEPTION_DEBUG=0"
-  "SHELL:-s DEMANGLE_SUPPORT=0"
   )
 endif()
 
