@@ -22,8 +22,8 @@ tuners:
       - GR
     command:
       tsp
-        -a 4/1
-        -I file /data/{{{channel}}}.ts
+        --add-input-stuffing  4/1
+        -I file --infinite /data/{{{channel}}}.ts
         -P reduce --target-bitrate 30000000
         -P filter -n --pid 0x500-0xfff
         -P continuity --fix
