@@ -7,13 +7,14 @@
                 "${workspaceFolder}/wasm/",
                 "${workspaceFolder}/wasm/build/",
                 "/usr/local/emsdk/upstream/emscripten/system/include/",
+                "/usr/local/emsdk/upstream/emscripten/cache/sysroot/include",
                 "${HOME}/ghq/github.com/emscripten-core/emsdk/upstream/emscripten/system/include/"
             ],
             "defines": [
                 "EMSCRIPTEN=1",
                 "__EMSCRIPTEN__=1"
             ],
-            "compilerPath": "/usr/bin/clang",
+            "compilerPath": "/usr/local/emsdk/upstream/bin/clang",
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-clang-x64",
