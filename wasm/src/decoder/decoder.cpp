@@ -307,8 +307,9 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
                     "tff:{} codecContext->field_order:?? pts:{} "
                     "stream.timebase:{} bufferSize:{}",
                     frame->width, frame->height, frame->ch_layout.nb_channels,
-                    frame->format, frame->key_frame, frame->interlaced_frame,
-                    frame->top_field_first, frame->pts,
+                    frame->format, frame->flags & AV_FRAME_FLAG_KEY,
+                    frame->flags & AV_FRAME_FLAG_INTERLACED,
+                    frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST, frame->pts,
                     av_q2d(videoStream->time_base), bufferSize);
       if (desc == nullptr) {
         spdlog::debug("desc is NULL");
@@ -341,8 +342,6 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
     av_packet_free(&ppacket);
   }
 
-  spdlog::debug("closing videoCodecContext");
-  avcodec_close(videoCodecContext);
   spdlog::debug("freeing videoCodecContext");
   avcodec_free_context(&videoCodecContext);
 }
@@ -421,8 +420,6 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
     }
     av_packet_free(&ppacket);
   }
-  spdlog::debug("closing audioCodecContext");
-  avcodec_close(audioCodecContext);
   spdlog::debug("freeing videoCodecContext");
   avcodec_free_context(&audioCodecContext);
 }
