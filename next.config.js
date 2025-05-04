@@ -38,6 +38,14 @@ module.exports = {
       }
     ]
   },
+  async rewrites () {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://mirakc:40772/api/:path*'
+      }
+    ]
+  },
   webpack: (config, { webpack }) => {
     const experiments = config.experiments || {}
     config.experiments = {
