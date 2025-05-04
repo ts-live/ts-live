@@ -22,18 +22,13 @@ tuners:
       - GR
     command:
       tsp
-        -a 2/1
         -I file /data/{{{channel}}}.ts
-        -P pcrbitrate --dts
-        -P reduce --target-bitrate 20000000
-        -P pcrbitrate --dts
-        -P pcradjust --ignore-pts --ignore-dts
-        -P filter -n --pid 0x1fff
+        -P filter -n --pid 0x500-0xfff
         -P continuity --fix
         -P sdt --original-network-id 0x00{{{channel}}}
         -P timeref --eit --start system
         -P svrename --japan --name ダミー{{{channel}}}
-        -P regulate --pcr-synchronous --packet-burst 32 --pid-pcr 0x100
+        -P regulate --bitrate 13500000 --packet-burst 32
 
 
 jobs:
