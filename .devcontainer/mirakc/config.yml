@@ -22,7 +22,37 @@ tuners:
       - GR
     command:
       tsp
-        --add-input-stuffing  4/1
+        --add-input-stuffing 4/1
+        -I file --infinite /data/{{{channel}}}.ts
+        -P reduce --target-bitrate 30000000
+        -P filter -n --pid 0x500-0xfff
+        -P continuity --fix
+        -P sdt --original-network-id 0x00{{{channel}}}
+        -P timeref --eit --start system
+        -P svrename --japan --name ダミー{{{channel}}}
+        -P regulate --bitrate 30000000 --packet-burst 32
+        -P filter -n --pid 0x1fff
+  - name: ダミー2
+    types:
+      - GR
+    command:
+      tsp
+        --add-input-stuffing 4/1
+        -I file --infinite /data/{{{channel}}}.ts
+        -P reduce --target-bitrate 30000000
+        -P filter -n --pid 0x500-0xfff
+        -P continuity --fix
+        -P sdt --original-network-id 0x00{{{channel}}}
+        -P timeref --eit --start system
+        -P svrename --japan --name ダミー{{{channel}}}
+        -P regulate --bitrate 30000000 --packet-burst 32
+        -P filter -n --pid 0x1fff
+  - name: ダミー3
+    types:
+      - GR
+    command:
+      tsp
+        --add-input-stuffing 4/1
         -I file --infinite /data/{{{channel}}}.ts
         -P reduce --target-bitrate 30000000
         -P filter -n --pid 0x500-0xfff

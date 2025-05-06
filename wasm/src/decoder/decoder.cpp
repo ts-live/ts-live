@@ -14,9 +14,13 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavfilter/avfilter.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/dict.h>
 #include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
@@ -49,9 +53,9 @@ size_t inputBufferWriteIndex = 0;
 AVCodecContext *videoCodecContext = nullptr;
 AVCodecContext *audioCodecContext = nullptr;
 
-std::deque<AVFrame *> videoFrameQueue, audioFrameQueue;
+std::deque<AVFrame *> videoFrameQueue, audioFrameQueue, idetFrameQueue;
 std::deque<std::pair<int64_t, std::vector<uint8_t>>> captionDataQueue;
-std::mutex videoFrameMtx, audioFrameMtx, captionDataMtx;
+std::mutex videoFrameMtx, audioFrameMtx, idetFrameMtx, captionDataMtx;
 bool videoFrameFound = false;
 
 std::deque<AVPacket *> videoPacketQueue, audioPacketQueue;
@@ -232,6 +236,14 @@ void resetInternal() {
       av_frame_free(&frame);
     }
   }
+  {
+    std::lock_guard<std::mutex> lock(idetFrameMtx);
+    while (!idetFrameQueue.empty()) {
+      auto frame = idetFrameQueue.front();
+      idetFrameQueue.pop_front();
+      av_frame_free(&frame);
+    }
+  }
   videoStream = nullptr;
   audioStreamList.clear();
   captionStream = nullptr;
@@ -243,6 +255,170 @@ void reset() {
   resetedDecoder = true;
   resetedDownloader = true;
   resetInternal();
+}
+
+void idetThreadFunc(bool &terminateFlag) {
+  int ret;
+  const AVFilter *bufferSource = avfilter_get_by_name("buffer");
+  const AVFilter *bufferSink = avfilter_get_by_name("buffersink");
+  AVFilterContext *bufferSourceContext;
+  AVFilterContext *bufferSinkContext;
+  AVFilterInOut *outputs = avfilter_inout_alloc();
+  AVFilterInOut *inputs = avfilter_inout_alloc();
+  AVFilterGraph *filterGraph = avfilter_graph_alloc();
+  AVFrame *filteredFrame = av_frame_alloc();
+
+  std::string bufferSourceArgs = fmt::format(
+      "video_size={}x{}:pix_fmt={}:colorspace={}:range={}:time_base={}/"
+      "{}:pixel_aspect={}/{}",
+      videoCodecContext->width, videoCodecContext->height,
+      av_get_pix_fmt_name(videoCodecContext->pix_fmt),
+      av_color_space_name(videoCodecContext->colorspace),
+      av_color_range_name(videoCodecContext->color_range),
+      videoStream->time_base.num, videoStream->time_base.den,
+      videoCodecContext->sample_aspect_ratio.num,
+      videoCodecContext->sample_aspect_ratio.den);
+
+  ret =
+      avfilter_graph_create_filter(&bufferSourceContext, bufferSource, "in",
+                                   bufferSourceArgs.c_str(), NULL, filterGraph);
+  if (ret < 0) {
+    spdlog::error("Can't create buffer source: {}: {}", ret, av_err2str(ret));
+    return;
+  }
+
+  ret = avfilter_graph_create_filter(&bufferSinkContext, bufferSink, "out",
+                                     NULL, NULL, filterGraph);
+  if (ret < 0) {
+    spdlog::error("Can't create buffer sink: {}: {}", ret, av_err2str(ret));
+    return;
+  }
+
+  enum AVPixelFormat pix_fmts[] = {AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE};
+
+  ret = av_opt_set_int_list(bufferSinkContext, "pix_fmts", pix_fmts,
+                            AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
+  if (ret < 0) {
+    spdlog::error("Can't set opt buffer sink");
+    return;
+  }
+
+  outputs->name = av_strdup("in");
+  outputs->filter_ctx = bufferSourceContext;
+  outputs->pad_idx = 0;
+  outputs->next = NULL;
+
+  inputs->name = av_strdup("out");
+  inputs->filter_ctx = bufferSinkContext;
+  inputs->pad_idx = 0;
+  inputs->next = NULL;
+
+  std::string filterDescription =
+      // fmt::format("idet=analyze_interlaced_flag=600");
+      fmt::format("idet");
+  ret = avfilter_graph_parse_ptr(filterGraph, filterDescription.c_str(),
+                                 &inputs, &outputs, NULL);
+
+  ret = avfilter_graph_config(filterGraph, NULL);
+  if (ret < 0) {
+    spdlog::error("Can't confiure filter graph: {}: {}", ret, av_err2str(ret));
+    return;
+  }
+  avfilter_inout_free(&inputs);
+  avfilter_inout_free(&outputs);
+
+  int frameCount = 0;
+  AVFrame *currentFrame = nullptr;
+  while (!terminateFlag) {
+    while (true) {
+      {
+        std::lock_guard<std::mutex> lock(idetFrameMtx);
+        if (!idetFrameQueue.empty()) {
+          break;
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    {
+      std::lock_guard<std::mutex> lock(idetFrameMtx);
+      currentFrame = idetFrameQueue.front();
+      idetFrameQueue.pop_front();
+    }
+    if (currentFrame->width == 0 || currentFrame->height == 0) {
+      spdlog::warn("width==0 or height==0");
+      av_frame_unref(currentFrame);
+      continue;
+    }
+    frameCount++;
+
+    ret = av_buffersrc_add_frame(bufferSourceContext, currentFrame);
+
+    if (ret < 0) {
+      spdlog::error("av_buffersrc_add_frame error: {}: {}", ret,
+                    av_err2str(ret));
+      av_frame_unref(currentFrame);
+      currentFrame = nullptr;
+      continue;
+    }
+
+    int count = 0;
+    ret = av_buffersink_get_frame(bufferSinkContext, filteredFrame);
+    if (ret < 0) {
+      spdlog::error("av_buffersink_get_frame err:{} {}", ret, av_err2str(ret));
+      continue;
+    }
+    AVDictionaryEntry *entry;
+    entry =
+        av_dict_get(currentFrame->metadata, "lavfi.idet.multiple.tff", NULL, 0);
+    spdlog::info("lavfi.idet.multiple.tff: {} {}", entry->key, entry->value);
+    double multi_tff = atof(entry->value);
+    entry =
+        av_dict_get(currentFrame->metadata, "lavfi.idet.multiple.bff", NULL, 0);
+    spdlog::info("lavfi.idet.multiple.bff: {} {}", entry->key, entry->value);
+    double multi_bff = atof(entry->value);
+    entry = av_dict_get(currentFrame->metadata,
+                        "lavfi.idet.multiple.progressive", NULL, 0);
+    double multi_prog = atof(entry->value);
+    entry = av_dict_get(currentFrame->metadata,
+                        "lavfi.idet.multiple.undetermined", NULL, 0);
+    double multi_undet = atof(entry->value);
+    double multi_total = (multi_tff + multi_bff + multi_prog + multi_undet);
+    double interlaced_ratio =
+        multi_total > 1e-5 ? (multi_tff + multi_bff) / multi_total : 0.0;
+    double prog_ratio = multi_total > 1e-5 ? multi_prog / multi_total : 0.0;
+    entry =
+        av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.top", NULL, 0);
+    double repeated_top = atof(entry->value);
+    entry = av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.bottom",
+                        NULL, 0);
+    double repeated_bottom = atof(entry->value);
+    entry = av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.neither",
+                        NULL, 0);
+    double repeated_neither = atof(entry->value);
+    double repeated_total = repeated_top + repeated_bottom + repeated_neither;
+    double repeated_ratio =
+        repeated_total > 1e-5
+            ? (repeated_top + repeated_bottom) / repeated_total
+            : 0.0;
+
+    if (prog_ratio > 0.90) {
+      spdlog::info("maybe progressive. {}", prog_ratio);
+    } else if (interlaced_ratio > 0.90) {
+      spdlog::info("maybe interlace. {}", interlaced_ratio);
+    } else if (0.20 < interlaced_ratio && interlaced_ratio < 0.80 &&
+               repeated_ratio > 0.05) {
+      spdlog::info("maybe telecine: {} {}", interlaced_ratio, repeated_ratio);
+    } else {
+      spdlog::info("unknown interlace/telecine: {} {}", interlaced_ratio,
+                   repeated_ratio);
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(videoFrameMtx);
+      videoFrameQueue.push_back(av_frame_clone(filteredFrame));
+    }
+    av_frame_free(&filteredFrame);
+  }
 }
 
 void videoDecoderThreadFunc(bool &terminateFlag) {
@@ -291,7 +467,6 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
       videoPacketQueue.pop_front();
     }
     AVPacket &packet = *ppacket;
-
     int ret = avcodec_send_packet(videoCodecContext, &packet);
     if (ret != 0) {
       spdlog::error("avcodec_send_packet(video) failed: {} {}", ret,
@@ -325,18 +500,17 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
           "buf[0]size:{} buf[1].size:{} buf[2].size:{} buffer_size:{}",
           frame->buf[0]->size, frame->buf[1]->size, frame->buf[2]->size,
           bufferSize);
+
       if (initPts < 0) {
         initPts = frame->pts;
       }
       frame->time_base.den = videoStream->time_base.den;
       frame->time_base.num = videoStream->time_base.num;
-
       AVFrame *cloneFrame = av_frame_clone(frame);
       {
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         videoFrameFound = true;
-
-        videoFrameQueue.push_back(cloneFrame);
+        idetFrameQueue.push_back(cloneFrame);
       }
     }
     av_packet_free(&ppacket);
@@ -393,7 +567,6 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
       audioPacketQueue.pop_front();
     }
     AVPacket &packet = *ppacket;
-
     int ret = avcodec_send_packet(audioCodecContext, &packet);
     if (ret != 0) {
       spdlog::error("avcodec_send_packet(audio) failed: {} {}", ret,
@@ -528,10 +701,13 @@ void decoderThreadFunc() {
 
   bool videoTerminateFlag = false;
   bool audioTerminateFlag = false;
+  bool idetTerminateFlag = false;
   std::thread videoDecoderThread =
       std::thread([&]() { videoDecoderThreadFunc(videoTerminateFlag); });
   std::thread audioDecoderThread =
       std::thread([&]() { audioDecoderThreadFunc(audioTerminateFlag); });
+  std::thread idetThread =
+      std::thread([&]() { idetThreadFunc(idetTerminateFlag); });
 
   // decode phase
   while (!resetedDecoder) {
@@ -610,6 +786,9 @@ void decoderThreadFunc() {
   videoDecoderThread.join();
   spdlog::debug("join to audioDecoderThread");
   audioDecoderThread.join();
+  idetTerminateFlag = true;
+  spdlog::debug("join to idetThread");
+  idetThread.join();
 
   spdlog::debug("freeing avio_context");
   avio_context_free(&avioContext);
