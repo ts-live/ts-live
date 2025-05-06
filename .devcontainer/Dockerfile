@@ -18,12 +18,13 @@ RUN apt-get install -y --no-install-recommends \
     sudo \
     zlib1g-dev
 
-RUN git clone https://github.com/tsduck/tsduck.git /tmp/tsduck && git -C /tmp/tsduck checkout v3.40-4165
+# RUN git clone https://github.com/tsduck/tsduck.git /tmp/tsduck && git -C /tmp/tsduck checkout v3.40-4165
+RUN git clone https://github.com/tsduck/tsduck.git /tmp/tsduck
 
 WORKDIR /tmp/tsduck
 RUN LLLVM=1 NOTEST=1 NODEKTEC=1 NOHIDES=1 NOVATEK=1 NOOPENSSL=1 NOZLIB=1 NOCURL=1 NOPCSC=1 NOSRT=1 NORIST=1 NOJAVA=1 NOPYTHON=1 NOHWACCEL=1 ./scripts/install-prerequisites.sh
-RUN make CC=clang-19 CXX=clang++-19 LLVM=1 NOTEST=1 NODEKTEC=1 NOHIDES=1 NOVATEK=1 NOOPENSSL=1 NOZLIB=1 NOCURL=1 NOPCSC=1 NOSRT=1 NORIST=1 NOJAVA=1 NOPYTHON=1 NOHWACCEL=1 -j$(nproc) default
-RUN make CC=clang-19 CXX=clang++-19 LLVM=1 NOTEST=1 NODEKTEC=1 NOHIDES=1 NOVATEK=1 NOOPENSSL=1 NOZLIB=1 NOCURL=1 NOPCSC=1 NOSRT=1 NORIST=1 NOJAVA=1 NOPYTHON=1 NOHWACCEL=1 install
+RUN make CC=clang-19 CXX=clang++-19 LLVM=1 NOTEST=1 NODEKTEC=1 NOHIDES=1 NOVATEK=1 NOOPENSSL=1 NOZLIB=1 NOCURL=1 NOPCSC=1 NOSRT=1 NORIST=1 NOJAVA=1 NOHWACCEL=1 -j$(nproc) default
+RUN make CC=clang-19 CXX=clang++-19 LLVM=1 NOTEST=1 NODEKTEC=1 NOHIDES=1 NOVATEK=1 NOOPENSSL=1 NOZLIB=1 NOCURL=1 NOPCSC=1 NOSRT=1 NORIST=1 NOJAVA=1 NOHWACCEL=1 install
 
 # emscripten用にcmake入れ直す
 # Optionally install the cmake for vcpkg
