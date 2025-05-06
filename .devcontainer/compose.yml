@@ -8,11 +8,11 @@ services:
     command: sleep infinity
     env_file: .env
   mirakc:
-    build:
-      context: ./mirakc
-      dockerfile: Dockerfile
+    image: ghcr.io/kounoike/dtv-dummy-server/mirakc:latest
+    # build:
+    #   context: ./mirakc
+    #   dockerfile: Dockerfile
     volumes:
-      - mirakc-data:/var/lib/mirakc/epg
       - ./data:/data
     env_file: .env
     environment:
