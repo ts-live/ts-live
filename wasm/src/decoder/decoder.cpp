@@ -62,6 +62,10 @@ std::deque<AVPacket *> videoPacketQueue, audioPacketQueue;
 std::mutex videoPacketMtx, audioPacketMtx;
 std::condition_variable videoPacketCv, audioPacketCv;
 
+double prog_ratio = 0.0;
+double interlace_ratio = 0.0;
+double telecine_ratio = 0.0;
+
 AVStream *videoStream = nullptr;
 std::vector<AVStream *> audioStreamList;
 AVStream *captionStream = nullptr;
@@ -111,7 +115,7 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
     inputBufferWriteIndex = remainSize;
   }
   if (inputBufferWriteIndex + nextSize >= MAX_INPUT_BUFFER) {
-    spdlog::error("Buffer overflow");
+    // spdlog::error("Buffer overflow");
     return emscripten::val::null();
   }
   auto retVal = emscripten::val(emscripten::typed_memory_view<uint8_t>(
@@ -267,6 +271,7 @@ void idetThreadFunc(bool &terminateFlag) {
   AVFilterInOut *inputs = avfilter_inout_alloc();
   AVFilterGraph *filterGraph = avfilter_graph_alloc();
   AVFrame *filteredFrame = av_frame_alloc();
+  std::string idetResults = std::string("");
 
   std::string bufferSourceArgs = fmt::format(
       "video_size={}x{}:pix_fmt={}:colorspace={}:range={}:time_base={}/"
@@ -313,9 +318,7 @@ void idetThreadFunc(bool &terminateFlag) {
   inputs->pad_idx = 0;
   inputs->next = NULL;
 
-  std::string filterDescription =
-      // fmt::format("idet=analyze_interlaced_flag=600");
-      fmt::format("idet");
+  std::string filterDescription = fmt::format("idet=half_life=16");
   ret = avfilter_graph_parse_ptr(filterGraph, filterDescription.c_str(),
                                  &inputs, &outputs, NULL);
 
@@ -346,18 +349,18 @@ void idetThreadFunc(bool &terminateFlag) {
     }
     if (currentFrame->width == 0 || currentFrame->height == 0) {
       spdlog::warn("width==0 or height==0");
-      av_frame_unref(currentFrame);
+      av_frame_free(&currentFrame);
       continue;
     }
     frameCount++;
 
-    ret = av_buffersrc_add_frame(bufferSourceContext, currentFrame);
+    ret = av_buffersrc_add_frame_flags(bufferSourceContext, currentFrame,
+                                       AV_BUFFERSRC_FLAG_KEEP_REF);
+    av_frame_free(&currentFrame);
 
     if (ret < 0) {
       spdlog::error("av_buffersrc_add_frame error: {}: {}", ret,
                     av_err2str(ret));
-      av_frame_unref(currentFrame);
-      currentFrame = nullptr;
       continue;
     }
 
@@ -367,57 +370,100 @@ void idetThreadFunc(bool &terminateFlag) {
       spdlog::error("av_buffersink_get_frame err:{} {}", ret, av_err2str(ret));
       continue;
     }
-    AVDictionaryEntry *entry;
-    entry =
-        av_dict_get(currentFrame->metadata, "lavfi.idet.multiple.tff", NULL, 0);
-    spdlog::info("lavfi.idet.multiple.tff: {} {}", entry->key, entry->value);
-    double multi_tff = atof(entry->value);
-    entry =
-        av_dict_get(currentFrame->metadata, "lavfi.idet.multiple.bff", NULL, 0);
-    spdlog::info("lavfi.idet.multiple.bff: {} {}", entry->key, entry->value);
-    double multi_bff = atof(entry->value);
-    entry = av_dict_get(currentFrame->metadata,
-                        "lavfi.idet.multiple.progressive", NULL, 0);
-    double multi_prog = atof(entry->value);
-    entry = av_dict_get(currentFrame->metadata,
-                        "lavfi.idet.multiple.undetermined", NULL, 0);
-    double multi_undet = atof(entry->value);
-    double multi_total = (multi_tff + multi_bff + multi_prog + multi_undet);
-    double interlaced_ratio =
-        multi_total > 1e-5 ? (multi_tff + multi_bff) / multi_total : 0.0;
-    double prog_ratio = multi_total > 1e-5 ? multi_prog / multi_total : 0.0;
-    entry =
-        av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.top", NULL, 0);
-    double repeated_top = atof(entry->value);
-    entry = av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.bottom",
-                        NULL, 0);
-    double repeated_bottom = atof(entry->value);
-    entry = av_dict_get(currentFrame->metadata, "lavfi.idet.repeated.neither",
-                        NULL, 0);
-    double repeated_neither = atof(entry->value);
-    double repeated_total = repeated_top + repeated_bottom + repeated_neither;
-    double repeated_ratio =
-        repeated_total > 1e-5
-            ? (repeated_top + repeated_bottom) / repeated_total
-            : 0.0;
-
-    if (prog_ratio > 0.90) {
-      spdlog::info("maybe progressive. {}", prog_ratio);
-    } else if (interlaced_ratio > 0.90) {
-      spdlog::info("maybe interlace. {}", interlaced_ratio);
-    } else if (0.20 < interlaced_ratio && interlaced_ratio < 0.80 &&
-               repeated_ratio > 0.05) {
-      spdlog::info("maybe telecine: {} {}", interlaced_ratio, repeated_ratio);
-    } else {
-      spdlog::info("unknown interlace/telecine: {} {}", interlaced_ratio,
-                   repeated_ratio);
-    }
-
     {
       std::lock_guard<std::mutex> lock(videoFrameMtx);
       videoFrameQueue.push_back(av_frame_clone(filteredFrame));
     }
-    av_frame_free(&filteredFrame);
+
+    AVDictionaryEntry *entry;
+    entry = av_dict_get(filteredFrame->metadata, "lavfi.idet.multiple.tff",
+                        NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double multi_tff = atof(entry->value);
+    entry = av_dict_get(filteredFrame->metadata, "lavfi.idet.multiple.bff",
+                        NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double multi_bff = atof(entry->value);
+    entry = av_dict_get(filteredFrame->metadata,
+                        "lavfi.idet.multiple.progressive", NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double multi_prog = atof(entry->value);
+    entry = av_dict_get(filteredFrame->metadata,
+                        "lavfi.idet.multiple.undetermined", NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double multi_undet = atof(entry->value);
+    double multi_total = (multi_tff + multi_bff + multi_prog + multi_undet);
+    interlace_ratio =
+        multi_total > 1e-5 ? (multi_tff + multi_bff) / multi_total : 0.0;
+    prog_ratio = multi_total > 1e-5 ? multi_prog / multi_total : 0.0;
+    entry = av_dict_get(filteredFrame->metadata, "lavfi.idet.repeated.top",
+                        NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double repeated_top = atof(entry->value);
+    entry = av_dict_get(filteredFrame->metadata, "lavfi.idet.repeated.bottom",
+                        NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double repeated_bottom = atof(entry->value);
+    entry = av_dict_get(filteredFrame->metadata, "lavfi.idet.repeated.neither",
+                        NULL, 0);
+    if (entry == nullptr) {
+      spdlog::warn("av_dict_get error");
+      av_frame_unref(filteredFrame);
+      continue;
+    }
+    double repeated_neither = atof(entry->value);
+    double repeated_total = repeated_top + repeated_bottom + repeated_neither;
+    telecine_ratio = repeated_total > 1e-5
+                         ? (repeated_top + repeated_bottom) / repeated_total
+                         : 0.0;
+    entry = av_dict_get(filteredFrame->metadata,
+                        "lavfi.idet.repeated.current_frame", NULL, 0);
+    idetResults += fmt::format("|{}:{}", entry->value, filteredFrame->pts);
+
+    if (frameCount % 30 == 0) {
+      spdlog::info("multi tff:{} bff:{} prog:{} undet:{}", multi_tff, multi_bff,
+                   multi_prog, multi_undet);
+      spdlog::info("repeated top:{} bottom:{} neither:{}", repeated_top,
+                   repeated_bottom, repeated_neither);
+      spdlog::info("interlace_ratio:{} telecine_ratio:{}", interlace_ratio,
+                   telecine_ratio);
+      if (prog_ratio > 0.90) {
+        spdlog::info("maybe progressive.");
+      } else if (interlace_ratio > 0.90 && telecine_ratio > 0.1) {
+        spdlog::info("maybe telecine");
+      } else if (interlace_ratio > 0.90) {
+        spdlog::info("maybe interlace");
+      } else {
+        spdlog::info("unknown interlace/telecine");
+      }
+      spdlog::info("idetResults:{}", idetResults);
+      idetResults = std::string("");
+    }
+    av_frame_unref(filteredFrame);
   }
 }
 
@@ -512,6 +558,7 @@ void videoDecoderThreadFunc(bool &terminateFlag) {
         videoFrameFound = true;
         idetFrameQueue.push_back(cloneFrame);
       }
+      av_frame_unref(frame);
     }
     av_packet_free(&ppacket);
   }
@@ -592,6 +639,7 @@ void audioDecoderThreadFunc(bool &terminateFlag) {
       }
     }
     av_packet_free(&ppacket);
+    av_frame_unref(frame);
   }
   spdlog::debug("freeing videoCodecContext");
   avcodec_free_context(&audioCodecContext);
@@ -607,7 +655,7 @@ void decoderThreadFunc() {
   size_t ibufSize = 64 * 1024;
   size_t requireBufSize = 2 * 1024 * 1024;
 
-  AVFrame *frame = nullptr;
+  AVFrame *frame = av_frame_alloc();
 
   // probe phase
   {
@@ -715,10 +763,6 @@ void decoderThreadFunc() {
       std::this_thread::sleep_for(std::chrono::milliseconds(30));
       continue;
     }
-    // decode frames
-    if (frame == nullptr) {
-      frame = av_frame_alloc();
-    }
     AVPacket *ppacket = av_packet_alloc();
     int videoCount = 0;
     int audioCount = 0;
@@ -767,6 +811,7 @@ void decoderThreadFunc() {
         }
       }
     }
+    av_frame_unref(frame);
     av_packet_free(&ppacket);
   }
 
@@ -841,6 +886,9 @@ void decoderMainloop() {
              (inputBufferWriteIndex - inputBufferReadIndex) / 1000000.0);
     data.set("CaptionDataQueueSize",
              captionStream ? captionDataQueue.size() : 0);
+    data.set("ProgRatio", prog_ratio);
+    data.set("InterlaceRatio", interlace_ratio);
+    data.set("TelecineRatio", telecine_ratio);
     statsBuffer.push_back(std::move(data));
     if (statsBuffer.size() >= 6) {
       auto statsArray = emscripten::val::array();
