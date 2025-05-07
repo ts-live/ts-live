@@ -215,7 +215,8 @@ top-fieldが無いのでyadifでtop-fieldを補完する。
 a:26
 t:26
 b:24
-bottom-fieldがいきすぎてるのでyadifでbottom-fieldを補完する。
+bottom-fieldがいきすぎてるのでyadifでbottom-fieldを補完すると画像が出来る、が、どうせ次のフレームで
+全部来るからこのフレームをスキップして良い。
 
 ```plaintext:frame4(repeated-bottom)
 ***********************
