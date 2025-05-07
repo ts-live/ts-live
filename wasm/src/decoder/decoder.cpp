@@ -62,6 +62,17 @@ std::deque<AVPacket *> videoPacketQueue, audioPacketQueue;
 std::mutex videoPacketMtx, audioPacketMtx;
 std::condition_variable videoPacketCv, audioPacketCv;
 
+// interlace/telecine用
+enum {
+  IDET_UNKNOWN = 0,
+  IDET_INTERLACE = 1,
+  IDET_PROGRESSIVE = 2,
+  IDET_TELECINE = 3,
+} idetType = IDET_INTERLACE; // とりあえずインターレースに固定しておく
+
+// second frame送信待ち
+AVFrame *keepedFrame = nullptr;
+
 double prog_ratio = 0.0;
 double interlace_ratio = 0.0;
 double telecine_ratio = 0.0;
@@ -273,6 +284,11 @@ void idetThreadFunc(bool &terminateFlag) {
   AVFrame *filteredFrame = av_frame_alloc();
   std::string idetResults = std::string("");
 
+  while (videoCodecContext == nullptr || videoCodecContext->width == 0 ||
+         videoCodecContext->height == 0) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
   std::string bufferSourceArgs = fmt::format(
       "video_size={}x{}:pix_fmt={}:colorspace={}:range={}:time_base={}/"
       "{}:pixel_aspect={}/{}",
@@ -288,7 +304,8 @@ void idetThreadFunc(bool &terminateFlag) {
       avfilter_graph_create_filter(&bufferSourceContext, bufferSource, "in",
                                    bufferSourceArgs.c_str(), NULL, filterGraph);
   if (ret < 0) {
-    spdlog::error("Can't create buffer source: {}: {}", ret, av_err2str(ret));
+    spdlog::error("Can't create buffer source[{}]: {}: {}", bufferSourceArgs,
+                  ret, av_err2str(ret));
     return;
   }
 
@@ -900,6 +917,59 @@ void decoderMainloop() {
     }
   }
 
+  // まずaudioFrameを取って比較用にする
+  AVFrame *audioFrame = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(audioFrameMtx);
+    while (!audioFrameQueue.empty()) {
+      AVFrame *frame = audioFrameQueue.front();
+      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
+        audioFrameQueue.pop_front();
+        av_frame_free(&frame);
+      } else {
+        audioFrame = frame;
+        break;
+      }
+    }
+  }
+  if (keepedFrame) {
+    // コード書き換えるの面倒くさいので別名付ける
+    AVFrame *currentFrame = keepedFrame;
+    // second frame送信待ちがある場合
+    if (!audioFrame) {
+      // AudioFrameが無い場合は処理落ちしている？から捨てとく。
+      av_frame_free(&keepedFrame);
+      keepedFrame = nullptr;
+      return;
+    }
+
+    // VideoとAudioのPTSをクロックから時間に直す。コピペ良くない
+    // TODO: クロック一回転したときの処理
+    double videoPtsTime = currentFrame->pts * av_q2d(currentFrame->time_base);
+    double audioPtsTime = audioFrame->pts * av_q2d(audioFrame->time_base);
+    // 上記から推定される、現在再生している音声のPTS（時間）
+    // double estimatedAudioPlayTime =
+    //     audioPtsTime - (double)queuedSize / ctx.openedAudioSpec.freq;
+    double estimatedAudioPlayTime =
+        audioPtsTime - (double)bufferedAudioSamples /
+                           audioStreamList[0]->codecpar->sample_rate;
+
+    // 1フレーム分くらいはズレてもいいからこれでいいか。フレーム真面目に考えると良くわからない。
+    bool showFlag = estimatedAudioPlayTime > videoPtsTime;
+    if (showFlag) {
+      // リップシンク条件を満たしてたらVideoFrame(second)再生
+      spdlog::debug("VideoFrame[second]@mainloop pts:{} time_base:{} {}/{} "
+                    "AudioQueueSize:{}",
+                    currentFrame->pts, av_q2d(currentFrame->time_base),
+                    currentFrame->time_base.num, currentFrame->time_base.den,
+                    audioFrameQueue.size());
+      drawWebGpu(currentFrame, true);
+      av_frame_free(&currentFrame);
+      keepedFrame = nullptr;
+    }
+    return;
+  }
+
   // time_base が 0/0 な不正フレームが入ってたら捨てる
   AVFrame *currentFrame = nullptr;
   {
@@ -911,20 +981,6 @@ void decoderMainloop() {
         av_frame_free(&frame);
       } else {
         currentFrame = frame;
-        break;
-      }
-    }
-  }
-  AVFrame *audioFrame = nullptr;
-  {
-    std::lock_guard<std::mutex> lock(audioFrameMtx);
-    while (!audioFrameQueue.empty()) {
-      AVFrame *frame = audioFrameQueue.front();
-      if (frame->time_base.den == 0 || frame->time_base.num == 0) {
-        audioFrameQueue.pop_front();
-        av_frame_free(&frame);
-      } else {
-        audioFrame = frame;
         break;
       }
     }
@@ -972,10 +1028,28 @@ void decoderMainloop() {
       }
       double timestamp =
           currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
-
-      drawWebGpu(currentFrame);
-
-      av_frame_free(&currentFrame);
+      drawWebGpu(currentFrame, false);
+      switch (idetType) {
+      case IDET_INTERLACE: {
+        std::lock_guard<std::mutex> lock(videoFrameMtx);
+        if (!videoFrameQueue.empty()) {
+          // 今表示したのはTopFieldなのでSecondFieldを次のフレームとの中間地点で表示する
+          keepedFrame = currentFrame;
+          AVFrame *nextFrame = videoFrameQueue.front();
+          const int64_t PTS_WRAP = 1ULL << 33;
+          int64_t d =
+              (nextFrame->pts - currentFrame->pts + PTS_WRAP) % PTS_WRAP;
+          keepedFrame->pts = (currentFrame->pts + d) % PTS_WRAP;
+        } else {
+          // 次のフレームがまだ来てないんでkeepしないで捨てちゃう
+          av_frame_free(&currentFrame);
+        }
+        break;
+      }
+      default:
+        av_frame_free(&currentFrame);
+        break;
+      }
     }
   }
 
