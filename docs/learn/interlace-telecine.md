@@ -201,7 +201,7 @@ a:28
 t:30
 b:28
 
-top-fieldが無いのでyadifでtop-fieldを補完する。
+top-fieldが無い（前のフレームのまま）のでyadifでtop-fieldを補完する。
 
 ```plaintext:frame3
 *************************
