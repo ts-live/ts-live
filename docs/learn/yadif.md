@@ -31,15 +31,15 @@ sp_scorej(j, x, y) =
    + absdiff(Cur(x + j, y - 1), Cur(x + j, y + 1))
    + absdiff(Cur(x + 1 + j, y - 1), Cur(x + 1 - j, y + 1)) + (j == 0 ? -1 : 0)
 sp_predj(j, x, y) = avg(Cur(x + j, y - 1), Cur(x - j, y + 1))
-[sp_score_m, sp_pred_m] = sp_scorej(0, x, y) > sp_scorej(-1, x, y) ?
+[sp_score_m, sp_pred_m] = sp_scorej(0, x, y) < sp_scorej(-1, x, y) ?
   [sp_scorej(0, x, y), sp_predj(0, x, y)] :
-    sp_scorej(-1, x, y) > sp_scorej(-2, x, y) ?
-      [sp_scorej(-2, x, y), sp_predj(-2, x, y)] : [sp_scorej(-1, x, y), sp_predj(-1, x, y)]
-[sp_score_p, sp_pred_p] = sp_scorej(0, x, y) > sp_scorej(+1, x, y) ?
+    sp_scorej(-1, x, y) < sp_scorej(-2, x, y) ?
+      [sp_scorej(-1, x, y), sp_predj(-1, x, y)] : [sp_scorej(-2, x, y), sp_predj(-2, x, y)]
+[sp_score_p, sp_pred_p] = sp_scorej(0, x, y) < sp_scorej(+1, x, y) ?
   [sp_scorej(0, x, y), sp_predj(0, x, y)] :
-    sp_scorej(+1, x, y) > sp_scorej(+2, x, y) ?
-      [sp_scorej(+2, x, y), sp_predj(+2, x, y)] : [sp_scorej(+1, x, y), sp_predj(+1, x, y)]
-sp_pred(x, y) = sp_score_m > sp_score_p ? sp_pred_m : sp_pred_p
+    sp_scorej(+1, x, y) < sp_scorej(+2, x, y) ?
+      [sp_scorej(+1, x, y), sp_predj(+1, x, y)] : [sp_scorej(+2, x, y), sp_predj(+2, x, y)]
+sp_pred(x, y) = sp_score_m < sp_score_p ? sp_pred_m : sp_pred_p
 
 tmp_diff0(x, y) = absdiff(Prev2(x, y), Next2(x, y))
 tmp_diff1(x, y) = avg(absdiff(Prev(x, y - 1), c), absdiff(Prev(x, y + 1), e))
@@ -69,15 +69,15 @@ sp_scorej(j, x, y) =
    + absdiff(Cur(x + j, y - 1), Cur(x + j, y + 1))
    + absdiff(Cur(x + 1 + j, y - 1), Cur(x + 1 - j, y + 1)) + (j == 0 ? -1 : 0)
 sp_predj(j, x, y) = avg(Cur(x + j, y - 1), Cur(x - j, y + 1))
-[sp_score_m, sp_pred_m] = sp_scorej(0, x, y) > sp_scorej(-1, x, y) ?
+[sp_score_m, sp_pred_m] = sp_scorej(0, x, y) < sp_scorej(-1, x, y) ?
   [sp_scorej(0, x, y), sp_predj(0, x, y)] :
-    sp_scorej(-1, x, y) > sp_scorej(-2, x, y) ?
-      [sp_scorej(-2, x, y), sp_predj(-2, x, y)] : [sp_scorej(-1, x, y), sp_predj(-1, x, y)]
-[sp_score_p, sp_pred_p] = sp_scorej(0, x, y) > sp_scorej(+1, x, y) ?
+    sp_scorej(-1, x, y) < sp_scorej(-2, x, y) ?
+      [sp_scorej(-1, x, y), sp_predj(-1, x, y)] : [sp_scorej(-2, x, y), sp_predj(-2, x, y)]
+[sp_score_p, sp_pred_p] = sp_scorej(0, x, y) < sp_scorej(+1, x, y) ?
   [sp_scorej(0, x, y), sp_predj(0, x, y)] :
-    sp_scorej(+1, x, y) > sp_scorej(+2, x, y) ?
-      [sp_scorej(+2, x, y), sp_predj(+2, x, y)] : [sp_scorej(+1, x, y), sp_predj(+1, x, y)]
-sp_pred(x, y) = sp_score_m > sp_score_p ? sp_pred_m : sp_pred_p
+    sp_scorej(+1, x, y) < sp_scorej(+2, x, y) ?
+      [sp_scorej(+1, x, y), sp_predj(+1, x, y)] : [sp_scorej(+2, x, y), sp_predj(+2, x, y)]
+sp_pred(x, y) = sp_score_m < sp_score_p ? sp_pred_m : sp_pred_p
 
 diff0(x, y) = max(
     absdiff(Prev2(x, y), Next2(x, y)) / 2,
