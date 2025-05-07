@@ -1,6 +1,6 @@
 R"(
 struct Parameters {
-  is_second: u32,
+  mode: i32,
 };
 
 @group(0) @binding(0) var mySampler : sampler;
@@ -90,8 +90,8 @@ fn spatial_pred(cur: texture_2d<f32>, j: i32, x: i32, y: i32) -> f32 {
   return avg(load(cur, x + j, y - 1), load(cur, x - j, y + 1));
 }
 
-fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: i32, y: i32, is_second: u32) -> f32 {
-  if (y % 2 == select(1, 0, is_second != 0)) {
+fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: i32, y: i32, mode: i32) -> f32 {
+  if ((mode & 0x03) == 0 || (y % 2 == (mode & 0x01))) {
     return load(cur, x, y);
   }
   var sp_score_j0 = spatial_scorej(cur, 0, x, y);
@@ -114,7 +114,7 @@ fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: 
   var sp_pred_p = select(sp_pred_jp12, sp_pred_j0, sp_score_j0 < sp_score_jp1);
   var sp_pred = select(sp_pred_p, sp_pred_m, sp_score_m < sp_score_p);
 
-  var select2 = is_second != 0;
+  var select2 = mode != 0;
   var c = load(cur, x, y - 1);
   var e = load(cur, x, y + 1);
   var b = avg(
@@ -156,14 +156,75 @@ fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
 fn main(
   @builtin(global_invocation_id) coord3: vec3<u32>
 ) {
+    var yadif_mode = parameters.mode & 0x03;
+    var extra = (parameters.mode & 0x0C) >> 2;
     var col = i32(coord3[0]);
     var row = i32(coord3[1]);
-    var u = (yadif(currentU, prevU, nextU, col, row, parameters.is_second) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
-    var v = (yadif(currentV, prevV, nextV, col, row, parameters.is_second) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
-    var y00 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0, parameters.is_second) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-    var y01 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1, parameters.is_second) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-    var y10 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0, parameters.is_second) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-    var y11 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1, parameters.is_second) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+
+    if (col < 10 && row < 10) {
+      // デバッグ用
+      var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+      if (yadif_mode == 0) {
+        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+      } else if (yadif_mode == 1) {
+        color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+      } else if (yadif_mode == 2) {
+        color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+      } else if (yadif_mode == 3) {
+        color = vec4<f32>(1.0, 0.0, 1.0, 1.0);
+      }
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), color);
+      return;
+    }
+    if (col >= 10 && col < 20 && row < 10) {
+      // デバッグ用
+      var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+      if (extra == 0) {
+        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+      } else if (extra == 1) {
+        color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+      } else if (extra == 2) {
+        color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+      } else if (extra == 3) {
+        color = vec4<f32>(0.0, 1.0, 1.0, 1.0);
+      } else if (extra == 4) {
+        color = vec4<f32>(1.0, 0.0, 1.0, 1.0);
+      }
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), color);
+      return;
+    }
+
+    if (yadif_mode == 3) {
+      if (extra == 0) {
+        // nextがrepeat-topなのでbottomを補完する
+        yadif_mode = 1;
+      } else if (extra == 1) {
+        // nextがneither、curがrepeat-topなのでtopを補完する
+        yadif_mode = 2;
+      } else if (extra == 2) {
+        // nextがrepeat-bottom、curがneither、prevがrepeat-topなので何もせずスキップする
+        return;
+      } else if (extra == 3) {
+        // nextがneither、curがrepeat-bottomなのでそのまま表示する
+        yadif_mode = 2;
+      } else if (extra == 4) {
+        // nextがneither、curがneither、prevがrepeat-bottomなのでそのまま表示する
+        yadif_mode = 2;
+      }
+      // 結局全部同じ処理でreturnがあるだけじゃん。
+    }
+    var u = (yadif(currentU, prevU, nextU, col, row, yadif_mode) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+    var v = (yadif(currentV, prevV, nextV, col, row, yadif_mode) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+    var y00 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y01 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y10 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y11 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
     var rgba00 = yuv2rgba(y00, u, v);
     var rgba01 = yuv2rgba(y01, u, v);
     var rgba10 = yuv2rgba(y10, u, v);

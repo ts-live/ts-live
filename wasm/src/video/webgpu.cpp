@@ -153,7 +153,7 @@ static void createTextures(int width, int height) {
   WGPUBufferDescriptor bufDesc = {
       .nextInChain = nullptr,
       .usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
-      .size = sizeof(uint32_t),
+      .size = sizeof(int32_t),
       .mappedAtCreation = false,
   };
   ctx.flagBuffer = wgpuDeviceCreateBuffer(ctx.device, &bufDesc);
@@ -173,7 +173,7 @@ static void createTextures(int width, int height) {
       {.binding = 11,
        .buffer = ctx.flagBuffer,
        .offset = 0,
-       .size = sizeof(uint32_t)},
+       .size = sizeof(int32_t)},
   };
   WGPUBindGroupDescriptor bgDesc = {};
   bgDesc.layout = ctx.yadifBindGroupLayout;
@@ -259,7 +259,7 @@ static void createPipeline() {
               {
                   .type = WGPUBufferBindingType_Uniform,
                   .hasDynamicOffset = false,
-                  .minBindingSize = sizeof(uint32_t),
+                  .minBindingSize = sizeof(int32_t),
               },
       }};
 
@@ -378,7 +378,9 @@ void initWebGpu() {
 static void (
     *initDeviceCallback)(); // キャプチャするとコンパイルできなかったのでグローバル変数化・・・
 
-void drawWebGpu(AVFrame *frame, bool isSecond) {
+// mode: 0: intelaced-top, 1: intelaced-bottom, 2: none
+// TODO: mode変だから変えたい
+void drawWebGpu(AVFrame *frame, int32_t mode) {
   if (frame->width != ctx.textureWidth || frame->height != ctx.textureHeight) {
     releaseTextures();
     createTextures(frame->width, frame->height);
@@ -453,7 +455,7 @@ void drawWebGpu(AVFrame *frame, bool isSecond) {
                         frame->height * frame->linesize[2],
                         &textureDataLayoutUv, &copySizeuv);
 
-  uint32_t flagValue = isSecond ? 1 : 0;
+  int32_t flagValue = mode;
   wgpuQueueWriteBuffer(ctx.queue, ctx.flagBuffer, 0, &flagValue,
                        sizeof(flagValue));
 

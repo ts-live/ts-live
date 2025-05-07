@@ -5,4 +5,4 @@ extern "C" {
 }
 
 void initWebGpu();
-void drawWebGpu(AVFrame *frame, bool isSecond);
+void drawWebGpu(AVFrame *frame, int32_t mode);

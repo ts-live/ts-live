@@ -38,6 +38,7 @@ const size_t MAX_INPUT_BUFFER = 20 * 1024 * 1024;
 const size_t PROBE_SIZE = 1024 * 1024;
 const size_t DEFAULT_WIDTH = 1920;
 const size_t DEFAULT_HEIGHT = 1080;
+const int64_t PTS_WRAP = 1ULL << 33;
 
 std::chrono::system_clock::time_point startTime;
 
@@ -68,7 +69,25 @@ enum {
   IDET_INTERLACE = 1,
   IDET_PROGRESSIVE = 2,
   IDET_TELECINE = 3,
-} idetType = IDET_INTERLACE; // とりあえずインターレースに固定しておく
+} idetType = IDET_TELECINE; // とりあえず決め打ち
+
+enum YadifMode {
+  YADIF_NONE = 0,
+  YADIF_TOP = 1,
+  YADIF_BOTTOM = 2,
+  YADIF_DETELECINE = 3,
+};
+
+// telecine検出用
+// 5フレーム周期のどこにrepeated-topがあるか
+// idetと同じく半減期を使う
+uint64_t telecineDetectCounts[5] = {0, 0, 0, 0, 0};
+
+// 👆を参照するためのカウンタ
+int frameCount = 0;
+
+// 逆テレシネ時のPTS補正用、PTS間隔の1/4
+int64_t detelecinePtsDiff4 = 0;
 
 // second frame送信待ち
 AVFrame *keepedFrame = nullptr;
@@ -133,6 +152,38 @@ emscripten::val getNextInputBuffer(size_t nextSize) {
       nextSize, &inputBuffer[inputBufferWriteIndex]));
   waitCv.notify_all();
   return retVal;
+}
+
+double min3(double a, double b, double c) {
+  if (a < b) {
+    if (a < c) {
+      return a;
+    } else {
+      return c;
+    }
+  } else {
+    if (b < c) {
+      return b;
+    } else {
+      return c;
+    }
+  }
+}
+
+double max3(double a, double b, double c) {
+  if (a > b) {
+    if (a > c) {
+      return a;
+    } else {
+      return c;
+    }
+  } else {
+    if (b > c) {
+      return b;
+    } else {
+      return c;
+    }
+  }
 }
 
 int read_packet(void *opaque, uint8_t *buf, int bufSize) {
@@ -347,7 +398,6 @@ void idetThreadFunc(bool &terminateFlag) {
   avfilter_inout_free(&inputs);
   avfilter_inout_free(&outputs);
 
-  int frameCount = 0;
   AVFrame *currentFrame = nullptr;
   while (!terminateFlag) {
     while (true) {
@@ -369,7 +419,6 @@ void idetThreadFunc(bool &terminateFlag) {
       av_frame_free(&currentFrame);
       continue;
     }
-    frameCount++;
 
     ret = av_buffersrc_add_frame_flags(bufferSourceContext, currentFrame,
                                        AV_BUFFERSRC_FLAG_KEEP_REF);
@@ -387,6 +436,12 @@ void idetThreadFunc(bool &terminateFlag) {
       spdlog::error("av_buffersink_get_frame err:{} {}", ret, av_err2str(ret));
       continue;
     }
+    frameCount++;
+    std::string frameCountStr = std::to_string(frameCount);
+
+    // flagsでDONT_STRDUPとかあるけどどう使えばいいのかな・・・？
+    av_dict_set(&filteredFrame->metadata, "ts-live.frame_count",
+                frameCountStr.c_str(), 0);
     {
       std::lock_guard<std::mutex> lock(videoFrameMtx);
       videoFrameQueue.push_back(av_frame_clone(filteredFrame));
@@ -454,12 +509,31 @@ void idetThreadFunc(bool &terminateFlag) {
     }
     double repeated_neither = atof(entry->value);
     double repeated_total = repeated_top + repeated_bottom + repeated_neither;
-    telecine_ratio = repeated_total > 1e-5
-                         ? (repeated_top + repeated_bottom) / repeated_total
-                         : 0.0;
+    // telecine_ratio = repeated_total > 1e-5
+    //                      ? (repeated_top + repeated_bottom) / repeated_total
+    //                      : 0.0;
+    telecine_ratio =
+        min3(3 * repeated_top, 3 * repeated_bottom, repeated_neither) /
+        max3(3 * repeated_top, 3 * repeated_bottom, repeated_neither);
     entry = av_dict_get(filteredFrame->metadata,
                         "lavfi.idet.repeated.current_frame", NULL, 0);
     idetResults += fmt::format("|{}:{}", entry->value, filteredFrame->pts);
+    if (strcmp(entry->value, "top") == 0) {
+      telecineDetectCounts[frameCount % 5]++;
+    } else if (strcmp(entry->value, "bottom") == 0) {
+      telecineDetectCounts[(frameCount + 3) % 5]++;
+    }
+
+    const double HALF_LIFE = 150.0;
+    const uint64_t PRECISION = 1048576;
+    const uint64_t decay_coefficient =
+        lrint(PRECISION * exp2(-1.0 / HALF_LIFE));
+    uint64_t total = 0;
+    for (int i = 0; i < 5; i++) {
+      telecineDetectCounts[i] =
+          av_rescale(telecineDetectCounts[i], decay_coefficient, PRECISION);
+      total += telecineDetectCounts[i];
+    }
 
     if (frameCount % 30 == 0) {
       spdlog::info("multi tff:{} bff:{} prog:{} undet:{}", multi_tff, multi_bff,
@@ -479,6 +553,19 @@ void idetThreadFunc(bool &terminateFlag) {
       }
       spdlog::info("idetResults:{}", idetResults);
       idetResults = std::string("");
+      spdlog::info(
+          "telecineDetectCounts: {} {} {} {} {} total:{}[{}] / {} {} {} {} {}",
+          telecineDetectCounts[0], telecineDetectCounts[1],
+          telecineDetectCounts[2], telecineDetectCounts[3],
+          telecineDetectCounts[4],
+          telecineDetectCounts[0] + telecineDetectCounts[1] +
+              telecineDetectCounts[2] + telecineDetectCounts[3] +
+              telecineDetectCounts[4],
+          total, double(telecineDetectCounts[0]) / (1e-10 + double(total)),
+          double(telecineDetectCounts[1]) / (1e-10 + double(total)),
+          double(telecineDetectCounts[2]) / (1e-10 + double(total)),
+          double(telecineDetectCounts[3]) / (1e-10 + double(total)),
+          double(telecineDetectCounts[4]) / (1e-10 + double(total)));
     }
     av_frame_unref(filteredFrame);
   }
@@ -933,10 +1020,12 @@ void decoderMainloop() {
     }
   }
   if (keepedFrame) {
+    spdlog::info("keepedFrame is not null");
     // コード書き換えるの面倒くさいので別名付ける
     AVFrame *currentFrame = keepedFrame;
     // second frame送信待ちがある場合
     if (!audioFrame) {
+      spdlog::debug("keepedFrame is not null but audioFrame is null");
       // AudioFrameが無い場合は処理落ちしている？から捨てとく。
       av_frame_free(&keepedFrame);
       keepedFrame = nullptr;
@@ -963,12 +1052,17 @@ void decoderMainloop() {
                     currentFrame->pts, av_q2d(currentFrame->time_base),
                     currentFrame->time_base.num, currentFrame->time_base.den,
                     audioFrameQueue.size());
-      drawWebGpu(currentFrame, true);
+      spdlog::info("IDET-INTERLACE-keepedFrame");
+      drawWebGpu(currentFrame, YADIF_BOTTOM);
       av_frame_free(&currentFrame);
       keepedFrame = nullptr;
+    } else {
+      spdlog::debug("not show: {} <= {} ", estimatedAudioPlayTime,
+                    videoPtsTime);
     }
     return;
   }
+  spdlog::debug("keepedFrame is null");
 
   // time_base が 0/0 な不正フレームが入ってたら捨てる
   AVFrame *currentFrame = nullptr;
@@ -1028,15 +1122,15 @@ void decoderMainloop() {
       }
       double timestamp =
           currentFrame->pts * av_q2d(currentFrame->time_base) * 1000000;
-      drawWebGpu(currentFrame, false);
       switch (idetType) {
       case IDET_INTERLACE: {
+        spdlog::info("IDET_INTERLACE");
+        drawWebGpu(currentFrame, YADIF_TOP);
         std::lock_guard<std::mutex> lock(videoFrameMtx);
         if (!videoFrameQueue.empty()) {
           // 今表示したのはTopFieldなのでSecondFieldを次のフレームとの中間地点で表示する
           keepedFrame = currentFrame;
           AVFrame *nextFrame = videoFrameQueue.front();
-          const int64_t PTS_WRAP = 1ULL << 33;
           int64_t d =
               (nextFrame->pts - currentFrame->pts + PTS_WRAP) % PTS_WRAP;
           keepedFrame->pts = (currentFrame->pts + d) % PTS_WRAP;
@@ -1046,7 +1140,75 @@ void decoderMainloop() {
         }
         break;
       }
+      case IDET_TELECINE: {
+        auto entry = av_dict_get(currentFrame->metadata, "ts-live.frame_count",
+                                 nullptr, 0);
+        if (entry == nullptr) {
+          spdlog::warn("av_dict_get error");
+          av_frame_free(&currentFrame);
+          break;
+        }
+        int currentFrameCount = atoi(entry->value);
+        int cycleAdjust = 0;
+        uint64_t maxCount = 0;
+        for (int i = 0; i < 5; i++) {
+          if (telecineDetectCounts[i] > maxCount) {
+            maxCount = telecineDetectCounts[i];
+            cycleAdjust = i;
+          }
+        }
+        auto entry2 = av_dict_get(currentFrame->metadata,
+                                  "lavfi.idet.repeated.current_frame", NULL, 0);
+        // spdlog::info(
+        //     "frameCount:{}/{} cycleAdjust:{} mode:{}
+        //     repeated.current_frame:{}", entry->value, currentFrameCount,
+        //     cycleAdjust, (currentFrameCount + 5 - cycleAdjust) % 5,
+        //     entry2->value);
+        AVFrame *nextFrame = nullptr;
+        {
+          std::lock_guard<std::mutex> lock(videoFrameMtx);
+          if (videoFrameQueue.empty()) {
+            // 次のフレームが来てないのでキューに戻す
+            videoFrameQueue.push_front(currentFrame);
+            return;
+          }
+          nextFrame = videoFrameQueue.front();
+        }
+        // デコーダのcurrentFrameはyadifで言うnextで、1回前がcur、2回前がprev
+        // デコーダのnextFrameはyadifのnextのもう1枚後
+        // なので、frame1をスキップしたいときはmoduloが2の時をスキップするイメージ
+        const char *expected[] = {"top    ", "neither", "bottom ", "neither",
+                                  "neither"};
+        uint64_t ptsAdjust[] = {1, 0, 4, 3, 2};
+        int adjusted = (currentFrameCount + 5 - cycleAdjust) % 5;
+        uint64_t newPTS =
+            nextFrame->pts - ptsAdjust[adjusted] * detelecinePtsDiff4;
+        spdlog::info("IDET_TELECINE-{} expected:{} actual:{} diff/4:{} "
+                     "current-PTS:{} next-PTS:{} newPTS:{}",
+                     adjusted, expected[adjusted], entry2->value,
+                     detelecinePtsDiff4, currentFrame->pts, nextFrame->pts,
+                     newPTS);
+        drawWebGpu(currentFrame, YADIF_DETELECINE | (adjusted << 2));
+        if (adjusted == 2) {
+          // DIFFを更新しておく
+          detelecinePtsDiff4 =
+              ((nextFrame->pts - currentFrame->pts + PTS_WRAP) % PTS_WRAP) / 4;
+          // このフレームはスキップされて次のフレームをすぐに描画したいから再帰で呼び出す
+          decoderMainloop();
+        }
+        av_frame_free(&currentFrame);
+        break;
+      }
+      // progressive判定したらYADIF_NONEにする
+      case IDET_PROGRESSIVE: {
+        spdlog::info("IDET_PROGRESSIVE");
+        drawWebGpu(currentFrame, YADIF_NONE);
+        av_frame_free(&currentFrame);
+        break;
+      }
       default:
+        spdlog::info("IDET_DEFAULT");
+        drawWebGpu(currentFrame, YADIF_TOP);
         av_frame_free(&currentFrame);
         break;
       }
