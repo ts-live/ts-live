@@ -1183,7 +1183,7 @@ void decoderMainloop() {
         int adjusted = (currentFrameCount + 5 - cycleAdjust) % 5;
         uint64_t newPTS =
             nextFrame->pts - ptsAdjust[adjusted] * detelecinePtsDiff4;
-        spdlog::info("IDET_TELECINE-{} expected:{} actual:{} diff/4:{} "
+        spdlog::info("IDET_TELECINE-{} expected:{} idet:{} diff/4:{} "
                      "current-PTS:{} next-PTS:{} newPTS:{}",
                      adjusted, expected[adjusted], entry2->value,
                      detelecinePtsDiff4, currentFrame->pts, nextFrame->pts,
