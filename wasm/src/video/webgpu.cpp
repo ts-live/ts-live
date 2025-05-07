@@ -32,6 +32,7 @@ struct WebGPUContext {
   WGPUTextureView frameView;
   WGPUBindGroup yadifBindGroup, bindGroup;
   WGPUSampler sampler;
+  WGPUBuffer flagBuffer;
 };
 
 static WebGPUContext ctx;
@@ -77,6 +78,7 @@ static void releaseTextures() {
 
   wgpuTextureViewRelease(ctx.frameView);
   wgpuTextureRelease(ctx.frameTexture);
+  wgpuBufferRelease(ctx.flagBuffer);
 }
 
 static void createTextures(int width, int height) {
@@ -148,6 +150,14 @@ static void createTextures(int width, int height) {
   viewDesc.format = WGPUTextureFormat_RGBA8Unorm;
   ctx.frameView = wgpuTextureCreateView(ctx.frameTexture, &viewDesc);
 
+  WGPUBufferDescriptor bufDesc = {
+      .nextInChain = nullptr,
+      .usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst,
+      .size = sizeof(int32_t),
+      .mappedAtCreation = false,
+  };
+  ctx.flagBuffer = wgpuDeviceCreateBuffer(ctx.device, &bufDesc);
+
   WGPUBindGroupEntry bgEntries[] = {
       {.binding = 0, .sampler = ctx.sampler},
       {.binding = 1, .textureView = ctx.frameView},
@@ -160,6 +170,10 @@ static void createTextures(int width, int height) {
       {.binding = 8, .textureView = ctx.nextViewY},
       {.binding = 9, .textureView = ctx.nextViewU},
       {.binding = 10, .textureView = ctx.nextViewV},
+      {.binding = 11,
+       .buffer = ctx.flagBuffer,
+       .offset = 0,
+       .size = sizeof(int32_t)},
   };
   WGPUBindGroupDescriptor bgDesc = {};
   bgDesc.layout = ctx.yadifBindGroupLayout;
@@ -238,7 +252,16 @@ static void createPipeline() {
       {.binding = 10,
        .visibility = WGPUShaderStage_Compute,
        .texture = textureLayout},
-  };
+      {
+          .binding = 11,
+          .visibility = WGPUShaderStage_Compute,
+          .buffer =
+              {
+                  .type = WGPUBufferBindingType_Uniform,
+                  .hasDynamicOffset = false,
+                  .minBindingSize = sizeof(int32_t),
+              },
+      }};
 
   WGPUBindGroupLayoutDescriptor bglDesc = {};
   bglDesc.entryCount = sizeof(bglEntries) / sizeof(bglEntries[0]);
@@ -355,7 +378,9 @@ void initWebGpu() {
 static void (
     *initDeviceCallback)(); // キャプチャするとコンパイルできなかったのでグローバル変数化・・・
 
-void drawWebGpu(AVFrame *frame) {
+// mode: 0: intelaced-top, 1: intelaced-bottom, 2: none
+// TODO: mode変だから変えたい
+void drawWebGpu(AVFrame *frame, int32_t mode) {
   if (frame->width != ctx.textureWidth || frame->height != ctx.textureHeight) {
     releaseTextures();
     createTextures(frame->width, frame->height);
@@ -429,6 +454,10 @@ void drawWebGpu(AVFrame *frame) {
   wgpuQueueWriteTexture(ctx.queue, &copyTexture, frame->data[2],
                         frame->height * frame->linesize[2],
                         &textureDataLayoutUv, &copySizeuv);
+
+  int32_t flagValue = mode;
+  wgpuQueueWriteBuffer(ctx.queue, ctx.flagBuffer, 0, &flagValue,
+                       sizeof(flagValue));
 
   WGPUComputePassEncoder compPass =
       wgpuCommandEncoderBeginComputePass(encoder, &compPassDesc);
