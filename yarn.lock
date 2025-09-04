@@ -593,10 +593,10 @@
   resolved "https://registry.yarnpkg.com/@types/dom-webcodecs/-/dom-webcodecs-0.1.7.tgz#29d3e7d4e0b9902676c599d74c1b6c15eafce714"
   integrity sha512-1euwRyJ7rQrddOa24d5ZcoDRMp68xEIwyb7PKb3Wpc2OullUxHQ4a63WPa5V8R+KtCWISKjgS+f83HCUVhXS/w==
 
-"@types/emscripten@^1.39.6":
-  version "1.39.6"
-  resolved "https://registry.yarnpkg.com/@types/emscripten/-/emscripten-1.39.6.tgz#698b90fe60d44acf93c31064218fbea93fbfd85a"
-  integrity sha512-H90aoynNhhkQP6DRweEjJp5vfUVdIj7tdPLsu7pq89vODD/lcugKfZOsfgwpvM6XUewEp2N5dCg1Uf3Qe55Dcg==
+"@types/emscripten@^1.41.0":
+  version "1.41.0"
+  resolved "https://registry.yarnpkg.com/@types/emscripten/-/emscripten-1.41.0.tgz#1fcbb051ce75b4fbfa2e42cf5d8950b345d0386e"
+  integrity sha512-oLLCgdfxo2+XPCOPQfqTVkvj7vIuOwiOMeXtQj1bZp6JmJoVQ0AWEVlU4NziM+7yv2bYDAzANJWH4hp8RNe2lw==
 
 "@types/js-cookie@^2.2.6":
   version "2.2.7"
