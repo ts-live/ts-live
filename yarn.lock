@@ -787,10 +787,10 @@ aria-query@^4.2.2:
     "@babel/runtime" "^7.10.2"
     "@babel/runtime-corejs3" "^7.10.2"
 
-aribb24.js@^1.10.9:
-  version "1.10.9"
-  resolved "https://registry.yarnpkg.com/aribb24.js/-/aribb24.js-1.10.9.tgz#f11e3fbe01e935844300b7397d86a02ed4c14d9c"
-  integrity sha512-rqi6LaK1wLjWnCDlOx4C4tvuaf66Be1ipcR4G67ygZDIcfuoYvMVkd7Qxw31Cq7fBpnt/CL0U3DTTiu0ArDiCQ==
+aribb24.js@^2.0.12:
+  version "2.0.12"
+  resolved "https://registry.yarnpkg.com/aribb24.js/-/aribb24.js-2.0.12.tgz#3591aa20ddd39a62487f5a3f668f909cdc9a3caf"
+  integrity sha512-IxSSdRjaXVks36HVGS54tOKxA/gmDsFnzfEO20TXAFHbtGfYvvSftETt2WwnmpknyDb6XhanSZgVbAzQisc89A==
 
 array-flatten@1.1.1:
   version "1.1.1"
