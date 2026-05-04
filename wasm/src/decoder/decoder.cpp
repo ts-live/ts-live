@@ -512,6 +512,8 @@ void idetThreadFunc(bool &terminateFlag) {
     // telecine_ratio = repeated_total > 1e-5
     //                      ? (repeated_top + repeated_bottom) / repeated_total
     //                      : 0.0;
+    const double HALF_LIFE = 150.0;
+    const uint64_t PRECISION = 1048576;
     telecine_ratio =
         min3(3 * repeated_top, 3 * repeated_bottom, repeated_neither) /
         max3(3 * repeated_top, 3 * repeated_bottom, repeated_neither);
@@ -519,13 +521,11 @@ void idetThreadFunc(bool &terminateFlag) {
                         "lavfi.idet.repeated.current_frame", NULL, 0);
     idetResults += fmt::format("|{}:{}", entry->value, filteredFrame->pts);
     if (strcmp(entry->value, "top") == 0) {
-      telecineDetectCounts[frameCount % 5]++;
+      telecineDetectCounts[frameCount % 5] += PRECISION;
     } else if (strcmp(entry->value, "bottom") == 0) {
-      telecineDetectCounts[(frameCount + 3) % 5]++;
+      telecineDetectCounts[(frameCount + 3) % 5] += PRECISION;
     }
 
-    const double HALF_LIFE = 150.0;
-    const uint64_t PRECISION = 1048576;
     const uint64_t decay_coefficient =
         lrint(PRECISION * exp2(-1.0 / HALF_LIFE));
     uint64_t total = 0;
