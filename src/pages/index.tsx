@@ -877,6 +877,48 @@ const Page: NextPage = () => {
                 dot={false}
               />
             </LineChart>
+            <LineChart width={550} height={250} data={showCharts ? chartData : []}>
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Legend />
+              <Line
+                type="linear"
+                dataKey="InterlaceRatio"
+                name="Interlace Ratio"
+                stroke="#829dca"
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart width={550} height={250} data={showCharts ? chartData : []}>
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Legend />
+              <Line
+                type="linear"
+                dataKey="ProgRatio"
+                name="Progressive Ratio"
+                stroke="#ca9d82"
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
+            <LineChart width={550} height={250} data={showCharts ? chartData : []}>
+              <CartesianGrid strokeDasharray={'3 3'} />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Legend />
+              <Line
+                type="linear"
+                dataKey="TelecineRatio"
+                name="Telecine Ratio"
+                stroke="#82ca9d"
+                isAnimationActive={false}
+                dot={false}
+              />
+            </LineChart>
           </div>
         ) : (
           <></>

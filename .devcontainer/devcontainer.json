@@ -10,7 +10,16 @@
 		"ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
 		"ghcr.io/devcontainers/features/node:1": {}
 	},
-	"postCreateCommand": "sudo /usr/local/emsdk/emsdk install 3.1.74 && sudo /usr/local/emsdk/emsdk activate 3.1.74 && sudo chown -R vscode /usr/local/emsdk && emcc -v "
+	"postCreateCommand": "sudo /usr/local/emsdk/emsdk install 3.1.74 && sudo /usr/local/emsdk/emsdk activate 3.1.74 && sudo chown -R vscode /usr/local/emsdk && emcc -v ",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"PolyMeilex.wgsl",
+				"mhutchie.git-graph",
+				"shd101wyy.markdown-preview-enhanced"
+			]
+		}
+	}
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},

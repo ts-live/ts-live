@@ -1,4 +1,8 @@
 R"(
+struct Parameters {
+  mode: i32,
+};
+
 @group(0) @binding(0) var mySampler : sampler;
 @group(0) @binding(1) var outputFrame :  texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(2) var currentY : texture_2d<f32>;
@@ -10,6 +14,7 @@ R"(
 @group(0) @binding(8) var nextY : texture_2d<f32>;
 @group(0) @binding(9) var nextU : texture_2d<f32>;
 @group(0) @binding(10) var nextV : texture_2d<f32>;
+@group(0) @binding(11) var<uniform> parameters : Parameters;
 
 fn to_coord(tex: texture_2d<f32>, fragUV: vec2<f32>) -> vec2<i32> {
   var dim = textureDimensions(tex);
@@ -20,21 +25,29 @@ fn to_coord(tex: texture_2d<f32>, fragUV: vec2<f32>) -> vec2<i32> {
 }
 
 fn bordered(x_: i32, y_: i32, dim: vec2<i32>) -> vec2<i32> {
-  var x = x_;
-  var y = y_;
-  if (x < 0) {
-    x = -x;
-  }
-  if (y < 0) {
-    y = -y;
-  }
-  if (x > dim[0] - 1) {
-    x = dim[0] - 1 - (x - (dim[0] - 1));
-  }
-  if (y > dim[1] - 1) {
-    y = dim[1] - 1 - (y - (dim[1] - 1));
-  }
-  return vec2<i32>(x, y);
+  // ボーダーリピートで書き換える
+  // ってか今は使ってないけど・・・
+  return vec2<i32>(
+    clamp(x_, 0, dim[0] - 1),
+    clamp(y_, 0, dim[1] - 1)
+  );
+
+  // 以前書いてたミラーボーダー処理のコード
+  // var x = x_;
+  // var y = y_;
+  // if (x < 0) {
+  //   x = -x;
+  // }
+  // if (y < 0) {
+  //   y = -y;
+  // }
+  // if (x > dim[0] - 1) {
+  //   x = dim[0] - 1 - (x - (dim[0] - 1));
+  // }
+  // if (y > dim[1] - 1) {
+  //   y = dim[1] - 1 - (y - (dim[1] - 1));
+  // }
+  // return vec2<i32>(x, y);
 }
 
 fn load(tex: texture_2d<f32>, x: i32, y: i32) -> f32 {
@@ -66,81 +79,71 @@ fn min3(a: f32, b: f32, c: f32) -> f32 {
   return (min(min(a, b), c));
 }
 
-fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: i32, y: i32) -> f32 {
-  if (y % 2 == 0) {
+fn spatial_scorej(cur: texture_2d<f32>, j: i32, x: i32, y: i32) -> f32 {
+  return absd(load(cur, x - 1 + j, y - 1), load(cur, x - 1 - j, y + 1))
+  + absd(load(cur, x + j, y - 1), load(cur, x + j, y + 1))
+  + absd(load(cur, x + 1 + j, y - 1), load(cur, x + 1 - j, y + 1))
+  + select(0.0, -1.0 / 255.0, j == 0);
+}
+
+fn spatial_pred(cur: texture_2d<f32>, j: i32, x: i32, y: i32) -> f32 {
+  return avg(load(cur, x + j, y - 1), load(cur, x - j, y + 1));
+}
+
+fn yadif(cur: texture_2d<f32>, prev: texture_2d<f32>, next: texture_2d<f32>, x: i32, y: i32, mode: i32) -> f32 {
+  if ((mode & 0x03) == 0 || (y % 2 == (mode & 0x01))) {
     return load(cur, x, y);
-  } else {
-    var c = load(cur, x, y - 1);
-    var d = avg(load(cur, x, y), load(next, x, y));
-    var e = load(cur, x, y + 1);
-    var tmp_diff0 = absd(load(cur, x, y), load(next, x, y)) / 2.0;
-    var tmp_diff1 = avg(absd(load(prev, x, y - 1), c), absd(load(prev, x, y + 1), e));
-    var tmp_diff2 = avg(absd(load(next, x, y - 1), c), absd(load(next, x, y + 1), e));
-    var diff = max3(tmp_diff0, tmp_diff1, tmp_diff2);
-
-    var b = avg(load(cur, x, y - 2), load(next, x, y - 2));
-    var f = avg(load(cur, x, y + 2), load(next, x, y + 2));
-    var max_ = max3(d - e, d -c, min(b -c, f - e));
-    var min_ = min3(d - e, d -c, max(b -c, f - e));
-    diff = max3(diff, min_, -max_);
-
-
-    // var spatial_pred_0 = avg(c, e);
-    var score_0 =
-      absd(load(cur, x - 1, y - 1), load(cur, x - 1, y + 1))
-      + absd(c, e)
-      + absd(load(cur, x + 1, y - 1), load(cur, x + 1, y + 1))
-      - 1.0 / 255.0;
-
-    var score_1 =
-        absd(load(cur, x - 2, y - 1), load(cur, x - 0, y + 1))
-      + absd(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1))
-      + absd(load(cur, x - 0, y - 1), load(cur, x + 2, y + 1));
-    // var spatial_pred_1 = avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1));
-
-    var score_2 =
-        absd(load(cur, x - 0, y - 1), load(cur, x - 2, y + 1))
-      + absd(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1))
-      + absd(load(cur, x + 2, y - 1), load(cur, x - 0, y + 1));
-    // var spatial_pred_2 = avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1));
-
-    if (score_1 < score_0 && score_1 < score_2) {
-      var score_11 = 
-        absd(load(cur, x - 3, y - 1), load(cur, x + 1, y + 1))
-      + absd(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1))
-      + absd(load(cur, x - 1, y - 1), load(cur, x + 3, y + 1));
-      // var spatial_pred_11 = avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1));
-      if (score_11 < score_1) {
-        // spatial_pred = spatial_pred_11;
-        return clamp(avg(load(cur, x - 2, y - 1), load(cur, x + 2, y + 1)), d - diff, d + diff);
-      } else {
-        // spatial_pred = spatial_pred_1;
-        return clamp(avg(load(cur, x - 1, y - 1), load(cur, x + 1, y + 1)), d - diff, d + diff);
-      }
-    } else {
-      if (score_2 < score_0 && score_2 < score_1) {
-        var score_21 = 
-          absd(load(cur, x + 1, y - 1), load(cur, x - 3, y + 1))
-        + absd(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1))
-        + absd(load(cur, x + 3, y - 1), load(cur, x - 1, y + 1));
-        // var spatial_pred_21 = avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1));
-
-        if (score_21 < score_2) {
-          // spatial_pred = spatial_pred_21;
-          return clamp(avg(load(cur, x + 2, y - 1), load(cur, x - 2, y + 1)), d - diff, d + diff);
-        } else {
-          // spatial_pred = spatial_pred_2;
-          return clamp(avg(load(cur, x + 1, y - 1), load(cur, x - 1, y + 1)), d - diff, d + diff);
-        }
-      } else {
-        return clamp(avg(c, e), d - diff, d + diff);
-      }
-    }
-    // return clamp(spatial_pred, d - diff, d + diff);
   }
+  var sp_score_j0 = spatial_scorej(cur, 0, x, y);
+  var sp_score_jm1 = spatial_scorej(cur, -1, x, y);
+  var sp_score_jm2 = spatial_scorej(cur, -2, x, y);
+  var sp_score_jp1 = spatial_scorej(cur, 1, x, y);
+  var sp_score_jp2 = spatial_scorej(cur, 2, x, y);
+  var sp_score_jm12 = select(sp_score_jm2, sp_score_jm1, sp_score_jm1 < sp_score_jm2);
+  var sp_score_m = select(sp_score_jm12, sp_score_j0, sp_score_j0 < sp_score_jm1);
+  var sp_score_jp12 = select(sp_score_jp2, sp_score_jp1, sp_score_jp1 < sp_score_jp2);
+  var sp_score_p = select(sp_score_jp12, sp_score_j0, sp_score_j0 < sp_score_jp1);
+  var sp_pred_j0 = spatial_pred(cur, 0, x, y);
+  var sp_pred_jm1 = spatial_pred(cur, -2, x, y);
+  var sp_pred_jm2 = spatial_pred(cur, -1, x, y);
+  var sp_pred_jp1 = spatial_pred(cur, 1, x, y);
+  var sp_pred_jp2 = spatial_pred(cur, 2, x, y);
+  var sp_pred_jm12 = select(sp_pred_jm2, sp_pred_jm1, sp_score_jm1 < sp_score_jm2);
+  var sp_pred_m = select(sp_pred_jm12, sp_pred_j0, sp_score_j0 < sp_score_jm1);
+  var sp_pred_jp12 = select(sp_pred_jp2, sp_pred_jp1, sp_score_jp1 < sp_score_jp2);
+  var sp_pred_p = select(sp_pred_jp12, sp_pred_j0, sp_score_j0 < sp_score_jp1);
+  var sp_pred = select(sp_pred_p, sp_pred_m, sp_score_m < sp_score_p);
+
+  var select2 = mode != 0;
+  var c = load(cur, x, y - 1);
+  var e = load(cur, x, y + 1);
+  var b = avg(
+    select(load(cur, x, y - 2), load(prev, x, y - 2), select2),
+    select(load(next, x, y - 2), load(cur, x, y - 2), select2)
+  );
+  var bmc = b - c;
+  var f = avg(
+    select(load(cur, x, y + 2), load(prev, x, y + 2), select2),
+    select(load(next, x, y + 2), load(cur, x, y + 2), select2)
+  );
+  var fme = f - e;
+  var d = avg(load(prev, x, y), load(next, x, y));
+  var dme = d - e;
+  var dmc = d - c;
+  var diff0 = max3(
+    absd(load(cur, x, y), load(next, x, y)) / 2.0,
+    avg(absd(load(prev, x, y - 1), c), absd(load(prev, x, y + 1), e)),
+    avg(absd(load(next, x, y - 1), c), absd(load(next, x, y + 1), e))
+  );
+  var diff_max = max3(dme, dmc, min(bmc, fme));
+  var diff_min = min3(dme, dmc, max(bmc, fme));  
+  var diff = max3(diff0, diff_min, -diff_max);
+
+  return clamp(sp_pred, d - diff, d + diff);
 }
 
 fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
+  // clampからsaturateに直してもいいかも（あんまり変わらないだろうけど）
   return vec4<f32>(
     clamp(y + 1.5748 * v, 0.0, 1.0),
     clamp(y - 0.1873 * u - 0.4681 * v, 0.0, 1.0),
@@ -153,21 +156,82 @@ fn yuv2rgba(y: f32, u: f32, v: f32) -> vec4<f32> {
 fn main(
   @builtin(global_invocation_id) coord3: vec3<u32>
 ) {
-  var col = i32(coord3[0]);
-  var row = i32(coord3[1]);
-  var u = (yadif(currentU, prevU, nextU, col, row) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
-  var v = (yadif(currentV, prevV, nextV, col, row) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
-  var y00 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-  var y01 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-  var y10 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-  var y11 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
-  var rgba00 = yuv2rgba(y00, u, v);
-  var rgba01 = yuv2rgba(y01, u, v);
-  var rgba10 = yuv2rgba(y10, u, v);
-  var rgba11 = yuv2rgba(y11, u, v);
-  textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), rgba00);
-  textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), rgba01);
-  textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), rgba10);
-  textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), rgba11);
+    var yadif_mode = parameters.mode & 0x03;
+    var extra = (parameters.mode & 0x0C) >> 2;
+    var col = i32(coord3[0]);
+    var row = i32(coord3[1]);
+
+    if (col < 10 && row < 10) {
+      // デバッグ用
+      var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+      if (yadif_mode == 0) {
+        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+      } else if (yadif_mode == 1) {
+        color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+      } else if (yadif_mode == 2) {
+        color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+      } else if (yadif_mode == 3) {
+        color = vec4<f32>(1.0, 0.0, 1.0, 1.0);
+      }
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), color);
+      return;
+    }
+    if (col >= 10 && col < 20 && row < 10) {
+      // デバッグ用
+      var color = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+      if (extra == 0) {
+        color = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+      } else if (extra == 1) {
+        color = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+      } else if (extra == 2) {
+        color = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+      } else if (extra == 3) {
+        color = vec4<f32>(0.0, 1.0, 1.0, 1.0);
+      } else if (extra == 4) {
+        color = vec4<f32>(1.0, 0.0, 1.0, 1.0);
+      }
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), color);
+      textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), color);
+      return;
+    }
+
+    if (yadif_mode == 3) {
+      if (extra == 0) {
+        // nextがrepeat-topなのでbottomを補完する
+        yadif_mode = 1;
+      } else if (extra == 1) {
+        // nextがneither、curがrepeat-topなのでtopを補完する
+        yadif_mode = 2;
+      } else if (extra == 2) {
+        // nextがrepeat-bottom、curがneither、prevがrepeat-topなので何もせずスキップする
+        return;
+      } else if (extra == 3) {
+        // nextがneither、curがrepeat-bottomなのでそのまま表示する
+        yadif_mode = 2;
+      } else if (extra == 4) {
+        // nextがneither、curがneither、prevがrepeat-bottomなのでそのまま表示する
+        yadif_mode = 2;
+      }
+      // 結局全部同じ処理でreturnがあるだけじゃん。
+    }
+    var u = (yadif(currentU, prevU, nextU, col, row, yadif_mode) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+    var v = (yadif(currentV, prevV, nextV, col, row, yadif_mode) - 128.0 / 255.0) * 128.0 / (128.0 - 16.0);
+    var y00 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 0, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y01 = (yadif(currentY, prevY, nextY, 2 * col + 0, 2 * row + 1, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y10 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 0, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var y11 = (yadif(currentY, prevY, nextY, 2 * col + 1, 2 * row + 1, yadif_mode) - 16.0 / 255.0) * 255.0 / (235.0 - 16.0);
+    var rgba00 = yuv2rgba(y00, u, v);
+    var rgba01 = yuv2rgba(y01, u, v);
+    var rgba10 = yuv2rgba(y10, u, v);
+    var rgba11 = yuv2rgba(y11, u, v);
+    textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 0), rgba00);
+    textureStore(outputFrame, vec2<i32>(2 * col + 0, 2 * row + 1), rgba01);
+    textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 0), rgba10);
+    textureStore(outputFrame, vec2<i32>(2 * col + 1, 2 * row + 1), rgba11);
 }
 )"

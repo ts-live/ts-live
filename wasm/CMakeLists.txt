@@ -63,6 +63,7 @@ set(FFMPEG_CONFIGURE_COMMAND_LIST
     --disable-protocols
     --disable-devices
     --disable-filters
+    --enable-filter=idet,null
 )
 list(JOIN FFMPEG_CONFIGURE_COMMAND_LIST " " FFMPEG_CONFIGURE_COMMAND)
 
